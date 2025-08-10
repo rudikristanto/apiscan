@@ -25,8 +25,10 @@ import java.util.stream.Stream;
 public class JavaSourceParser {
     private static final Logger logger = LoggerFactory.getLogger(JavaSourceParser.class);
     private final JavaParser javaParser;
+    private final Path projectPath;
     
     public JavaSourceParser(Path projectPath) {
+        this.projectPath = projectPath;
         CombinedTypeSolver typeSolver = new CombinedTypeSolver();
         typeSolver.add(new ReflectionTypeSolver());
         
@@ -80,6 +82,10 @@ public class JavaSourceParser {
             .filter(ann -> ann.getNameAsString().equals(name) || 
                           ann.getNameAsString().endsWith("." + name))
             .findFirst();
+    }
+    
+    public Path getProjectPath() {
+        return projectPath;
     }
     
     private List<Path> findSourceDirectories(Path projectPath) {

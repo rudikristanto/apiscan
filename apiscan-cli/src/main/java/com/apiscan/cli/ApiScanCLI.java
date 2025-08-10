@@ -51,7 +51,7 @@ public class ApiScanCLI implements Callable<Integer> {
     
     private final List<FrameworkDetector> detectors;
     private final List<FrameworkScanner> scanners;
-    private final OpenApiGenerator openApiGenerator;
+    private final SwaggerCoreOpenApiGenerator openApiGenerator;
     private final ReportGenerator reportGenerator;
     
     public ApiScanCLI() {
@@ -62,7 +62,7 @@ public class ApiScanCLI implements Callable<Integer> {
         detectors.add(new SpringFrameworkDetector());
         scanners.add(new SpringFrameworkScanner());
         
-        this.openApiGenerator = new OpenApiGenerator();
+        this.openApiGenerator = new SwaggerCoreOpenApiGenerator();
         this.reportGenerator = new ReportGenerator();
     }
     
@@ -108,25 +108,31 @@ public class ApiScanCLI implements Callable<Integer> {
         System.out.println("[SUCCESS] Scan completed in " + scanTime + "ms");
         System.out.println("[RESULT] Found " + result.getEndpoints().size() + " API endpoints");
         
-        // Generate OpenAPI specification
-        if (outputPath != null || verbose) {
-            System.out.println("[INFO] Generating OpenAPI specification...");
-            String openApiSpec = openApiGenerator.generate(result, format);
-            
-            // Save to file if output path specified
-            if (outputPath != null) {
-                Path outputFile = Paths.get(outputPath);
-                openApiGenerator.saveToFile(openApiSpec, outputFile);
-                System.out.println("[SUCCESS] OpenAPI specification saved: " + outputFile.getFileName());
-            }
-            
-            // Print spec to console if verbose and no output file
-            if (outputPath == null && verbose) {
-                System.out.println("\n" + "=".repeat(60));
-                System.out.println("OpenAPI Specification (" + format.toString().toUpperCase() + ")");
-                System.out.println("=".repeat(60));
-                System.out.println(openApiSpec);
-            }
+        // Generate OpenAPI specification (core requirement from CLAUDE.md)
+        System.out.println("[INFO] Generating OpenAPI specification...");
+        String openApiSpec = openApiGenerator.generate(result, format);
+        
+        // Determine output file path
+        Path outputFile;
+        if (outputPath != null) {
+            outputFile = Paths.get(outputPath);
+        } else {
+            // Auto-generate filename based on project name and format in current directory
+            String projectName = path.getFileName().toString();
+            String fileName = projectName + "-openapi." + format.toString().toLowerCase();
+            outputFile = Paths.get(System.getProperty("user.dir")).resolve(fileName);
+        }
+        
+        // Save OpenAPI specification to file
+        openApiGenerator.saveToFile(openApiSpec, outputFile);
+        System.out.println("[SUCCESS] OpenAPI specification saved: " + outputFile.toAbsolutePath());
+        
+        // Print spec to console if verbose mode is enabled
+        if (verbose) {
+            System.out.println("\n" + "=".repeat(60));
+            System.out.println("OpenAPI Specification (" + format.toString().toUpperCase() + ")");
+            System.out.println("=".repeat(60));
+            System.out.println(openApiSpec);
         }
         
         // Show summary if requested

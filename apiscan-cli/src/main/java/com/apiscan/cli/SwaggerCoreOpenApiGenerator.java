@@ -2,12 +2,16 @@ package com.apiscan.cli;
 
 import com.apiscan.core.model.ApiEndpoint;
 import com.apiscan.core.model.ScanResult;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
-import io.swagger.v3.oas.models.*;
+import io.swagger.v3.core.util.Json;
+import io.swagger.v3.core.util.Yaml;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.Operation;
+import io.swagger.v3.oas.models.PathItem;
+import io.swagger.v3.oas.models.Paths;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.media.Content;
 import io.swagger.v3.oas.models.media.MediaType;
@@ -16,10 +20,10 @@ import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.oas.models.parameters.PathParameter;
 import io.swagger.v3.oas.models.parameters.QueryParameter;
 import io.swagger.v3.oas.models.parameters.HeaderParameter;
-import io.swagger.v3.oas.models.parameters.RequestBody;
 import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.responses.ApiResponses;
 import io.swagger.v3.oas.models.servers.Server;
+import io.swagger.v3.oas.models.tags.Tag;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -27,32 +31,20 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class OpenApiGenerator {
-    
-    private final ObjectMapper jsonMapper;
-    private final ObjectMapper yamlMapper;
-    
-    public OpenApiGenerator() {
-        this.jsonMapper = new ObjectMapper();
-        this.jsonMapper.enable(SerializationFeature.INDENT_OUTPUT);
-        // Configure Jackson to skip null values and default values to avoid invalid OpenAPI specs
-        this.jsonMapper.setSerializationInclusion(JsonInclude.Include.NON_DEFAULT);
-        
-        YAMLFactory yamlFactory = new YAMLFactory();
-        yamlFactory.disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER);
-        this.yamlMapper = new ObjectMapper(yamlFactory);
-        // Configure YAML mapper to skip null values and default values to avoid invalid OpenAPI specs
-        this.yamlMapper.setSerializationInclusion(JsonInclude.Include.NON_DEFAULT);
-    }
+/**
+ * OpenAPI generator using Swagger Core library for enterprise-grade specification generation.
+ * This replaces the custom implementation to ensure full OpenAPI 3.0.3 compliance.
+ */
+public class SwaggerCoreOpenApiGenerator {
     
     public String generate(ScanResult scanResult, ApiScanCLI.OutputFormat format) {
         OpenAPI openApi = buildOpenApiSpec(scanResult);
         
         try {
             if (format == ApiScanCLI.OutputFormat.json) {
-                return jsonMapper.writeValueAsString(openApi);
+                return Json.pretty(openApi);
             } else {
-                return yamlMapper.writeValueAsString(openApi);
+                return Yaml.pretty(openApi);
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to generate OpenAPI specification", e);
@@ -78,20 +70,21 @@ public class OpenApiGenerator {
         
         // Build paths
         Paths paths = new Paths();
-        Map<String, Set<String>> taggedOperations = new HashMap<>();
+        Set<String> usedTags = new HashSet<>();
         
         for (ApiEndpoint endpoint : scanResult.getEndpoints()) {
-            addEndpointToSpec(endpoint, paths, taggedOperations);
+            addEndpointToSpec(endpoint, paths, usedTags);
         }
         
         openApi.paths(paths);
         
-        // Add tags
-        List<io.swagger.v3.oas.models.tags.Tag> tags = taggedOperations.keySet().stream()
+        // Add tags (only for tags that are actually used)
+        List<Tag> tags = usedTags.stream()
             .sorted()
             .map(tagName -> {
-                io.swagger.v3.oas.models.tags.Tag tag = new io.swagger.v3.oas.models.tags.Tag();
+                Tag tag = new Tag();
                 tag.setName(tagName);
+                tag.setDescription(tagName + " operations");
                 return tag;
             })
             .collect(Collectors.toList());
@@ -99,10 +92,6 @@ public class OpenApiGenerator {
         if (!tags.isEmpty()) {
             openApi.tags(tags);
         }
-        
-        // Add components (schemas, etc.)
-        Components components = new Components();
-        openApi.components(components);
         
         return openApi;
     }
@@ -126,8 +115,8 @@ public class OpenApiGenerator {
         return servers;
     }
     
-    private void addEndpointToSpec(ApiEndpoint endpoint, Paths paths, Map<String, Set<String>> taggedOperations) {
-        String path = endpoint.getPath();
+    private void addEndpointToSpec(ApiEndpoint endpoint, Paths paths, Set<String> usedTags) {
+        String path = normalizePath(endpoint.getPath());
         PathItem pathItem = paths.get(path);
         
         if (pathItem == null) {
@@ -135,7 +124,7 @@ public class OpenApiGenerator {
             paths.addPathItem(path, pathItem);
         }
         
-        Operation operation = buildOperation(endpoint, taggedOperations);
+        Operation operation = buildOperation(endpoint, usedTags);
         
         // Set operation based on HTTP method
         switch (endpoint.getHttpMethod().toUpperCase()) {
@@ -163,17 +152,34 @@ public class OpenApiGenerator {
         }
     }
     
-    private Operation buildOperation(ApiEndpoint endpoint, Map<String, Set<String>> taggedOperations) {
+    /**
+     * Normalize path to ensure consistent formatting.
+     * All paths should start with / for OpenAPI compliance.
+     */
+    private String normalizePath(String path) {
+        if (path == null || path.isEmpty()) {
+            return "/";
+        }
+        
+        // Ensure path starts with /
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+        
+        return path;
+    }
+    
+    private Operation buildOperation(ApiEndpoint endpoint, Set<String> usedTags) {
         Operation operation = new Operation();
         
         // Set operation ID
         operation.operationId(endpoint.getOperationId());
         
         // Set summary and description
-        if (endpoint.getSummary() != null) {
+        if (endpoint.getSummary() != null && !endpoint.getSummary().trim().isEmpty()) {
             operation.summary(endpoint.getSummary());
         }
-        if (endpoint.getDescription() != null) {
+        if (endpoint.getDescription() != null && !endpoint.getDescription().trim().isEmpty()) {
             operation.description(endpoint.getDescription());
         }
         
@@ -184,25 +190,49 @@ public class OpenApiGenerator {
             String tag = endpoint.getControllerClass();
             if (tag != null) {
                 tag = tag.replace("Controller", "")
-                         .replace("RestController", "");
+                         .replace("RestController", "")
+                         .replace("Rest", "");
                 tags = Collections.singletonList(tag);
             }
         }
         
         if (!tags.isEmpty()) {
             operation.tags(tags);
-            for (String tag : tags) {
-                taggedOperations.computeIfAbsent(tag, k -> new HashSet<>())
-                    .add(endpoint.getOperationId());
+            usedTags.addAll(tags);
+        }
+        
+        // Set parameters - combine declared parameters with path parameters
+        List<Parameter> parameters = new ArrayList<>();
+        
+        // First, add declared parameters that match exactly or are non-path parameters
+        for (ApiEndpoint.Parameter param : endpoint.getParameters()) {
+            Parameter openApiParam = buildParameter(param, endpoint.getPath());
+            if (openApiParam != null) {
+                parameters.add(openApiParam);
             }
         }
         
-        // Set parameters
-        if (!endpoint.getParameters().isEmpty()) {
-            List<Parameter> parameters = new ArrayList<>();
-            for (ApiEndpoint.Parameter param : endpoint.getParameters()) {
-                parameters.add(buildParameterForPath(param, endpoint.getPath()));
+        // Then, ensure all path parameters are declared (create missing ones)
+        Set<String> pathParamNames = extractPathParameterNames(endpoint.getPath());
+        Set<String> declaredPathParams = endpoint.getParameters().stream()
+            .filter(p -> isPathParameter(p.getName(), endpoint.getPath()))
+            .map(ApiEndpoint.Parameter::getName)
+            .collect(Collectors.toSet());
+        
+        // Add missing path parameters with default values
+        for (String pathParamName : pathParamNames) {
+            if (!declaredPathParams.contains(pathParamName)) {
+                Parameter missingPathParam = new PathParameter();
+                missingPathParam.name(pathParamName);
+                missingPathParam.required(true);
+                Schema<Object> schema = new Schema<>();
+                schema.type("string"); // Default to string for unknown path parameters
+                missingPathParam.schema(schema);
+                parameters.add(missingPathParam);
             }
+        }
+        
+        if (!parameters.isEmpty()) {
             operation.parameters(parameters);
         }
         
@@ -233,42 +263,22 @@ public class OpenApiGenerator {
         return operation;
     }
     
-    private Parameter buildParameter(ApiEndpoint.Parameter param) {
-        Parameter parameter;
+    private Parameter buildParameter(ApiEndpoint.Parameter param, String path) {
+        String paramName = param.getName();
+        String normalizedPath = normalizePath(path);
+        boolean isPathParameter = isPathParameter(paramName, normalizedPath);
         
-        switch (param.getIn()) {
-            case "path":
-                parameter = new PathParameter();
-                break;
-            case "header":
-                parameter = new HeaderParameter();
-                break;
-            case "query":
-            default:
-                parameter = new QueryParameter();
-                break;
+        // Skip parameters that should be path parameters but don't match path exactly
+        // These will be handled by the missing path parameter logic
+        Set<String> pathParamNames = extractPathParameterNames(normalizedPath);
+        if (!pathParamNames.isEmpty() && !isPathParameter && 
+            (param.getIn() == null || param.getIn().equals("query"))) {
+            // This might be a misnamed path parameter - skip it
+            // We'll create the correct one from the path
+            return null;
         }
         
-        parameter.name(param.getName());
-        if (param.getDescription() != null && !param.getDescription().trim().isEmpty()) {
-            parameter.description(param.getDescription());
-        }
-        parameter.required(param.isRequired());
-        
-        // Set schema
-        Schema<?> schema = new Schema<>();
-        schema.type(mapJavaTypeToOpenApiType(param.getType()));
-        parameter.schema(schema);
-        
-        return parameter;
-    }
-    
-    private Parameter buildParameterForPath(ApiEndpoint.Parameter param, String path) {
         Parameter parameter;
-        
-        // Determine if parameter is in path by checking if path contains {paramName}
-        String paramPlaceholder = "{" + param.getName() + "}";
-        boolean isPathParameter = path.contains(paramPlaceholder);
         
         if (isPathParameter) {
             parameter = new PathParameter();
@@ -286,21 +296,51 @@ public class OpenApiGenerator {
             parameter.required(param.isRequired());
         }
         
-        parameter.name(param.getName());
+        parameter.name(paramName);
+        
         if (param.getDescription() != null && !param.getDescription().trim().isEmpty()) {
             parameter.description(param.getDescription());
         }
         
-        // Set schema
-        Schema<?> schema = new Schema<>();
+        // Set schema using Swagger Core Schema
+        Schema<Object> schema = new Schema<>();
         schema.type(mapJavaTypeToOpenApiType(param.getType()));
         parameter.schema(schema);
         
         return parameter;
     }
     
-    private RequestBody buildRequestBody(ApiEndpoint.RequestBody body) {
-        RequestBody requestBody = new RequestBody();
+    /**
+     * Extract the actual path parameter names from the URL path.
+     * For OpenAPI compliance, parameter names must exactly match path segments.
+     */
+    private Set<String> extractPathParameterNames(String path) {
+        Set<String> pathParams = new HashSet<>();
+        String normalizedPath = normalizePath(path);
+        
+        // Extract all {paramName} segments from the path
+        for (String segment : normalizedPath.split("/")) {
+            if (segment.startsWith("{") && segment.endsWith("}")) {
+                String paramName = segment.substring(1, segment.length() - 1);
+                pathParams.add(paramName);
+            }
+        }
+        
+        return pathParams;
+    }
+    
+    /**
+     * Check if parameter should be treated as path parameter based on exact matching.
+     * OpenAPI requires parameter names to exactly match path segments for validation.
+     */
+    private boolean isPathParameter(String paramName, String path) {
+        Set<String> pathParamNames = extractPathParameterNames(path);
+        return pathParamNames.contains(paramName);
+    }
+    
+    private io.swagger.v3.oas.models.parameters.RequestBody buildRequestBody(ApiEndpoint.RequestBody body) {
+        io.swagger.v3.oas.models.parameters.RequestBody requestBody = new io.swagger.v3.oas.models.parameters.RequestBody();
+        
         if (body.getDescription() != null && !body.getDescription().trim().isEmpty()) {
             requestBody.description(body.getDescription());
         }
@@ -309,13 +349,13 @@ public class OpenApiGenerator {
         Content content = new Content();
         for (Map.Entry<String, ApiEndpoint.MediaType> entry : body.getContent().entrySet()) {
             MediaType mediaType = new MediaType();
-            Schema<?> schema = new Schema<>();
+            Schema<Object> schema = new Schema<>();
             
             String schemaType = entry.getValue().getSchema();
             if (isPrimitiveType(schemaType)) {
                 schema.type(mapJavaTypeToOpenApiType(schemaType));
             } else {
-                // Use generic object type instead of $ref to non-existent schema
+                // Use generic object type with description
                 schema.type("object");
                 schema.description("Request body of type: " + schemaType);
             }
@@ -332,7 +372,7 @@ public class OpenApiGenerator {
         ApiResponse apiResponse = new ApiResponse();
         String description = response.getDescription();
         if (description == null || description.trim().isEmpty()) {
-            description = "Response";
+            description = "Successful operation";
         }
         apiResponse.description(description);
         
@@ -340,25 +380,23 @@ public class OpenApiGenerator {
             Content content = new Content();
             for (Map.Entry<String, ApiEndpoint.MediaType> entry : response.getContent().entrySet()) {
                 MediaType mediaType = new MediaType();
-                Schema<?> schema = new Schema<>();
+                Schema<Object> schema = new Schema<>();
                 
                 String schemaType = entry.getValue().getSchema();
                 if (isPrimitiveType(schemaType)) {
                     schema.type(mapJavaTypeToOpenApiType(schemaType));
                 } else if (schemaType.startsWith("List<") || schemaType.startsWith("Set<")) {
                     schema.type("array");
-                    Schema<?> itemSchema = new Schema<>();
+                    Schema<Object> itemSchema = new Schema<>();
                     String itemType = extractGenericType(schemaType);
                     if (isPrimitiveType(itemType)) {
                         itemSchema.type(mapJavaTypeToOpenApiType(itemType));
                     } else {
-                        // Use generic object type instead of $ref to non-existent schema
                         itemSchema.type("object");
                         itemSchema.description("Array item of type: " + itemType);
                     }
                     schema.items(itemSchema);
                 } else {
-                    // Use generic object type instead of $ref to non-existent schema
                     schema.type("object");
                     schema.description("Response of type: " + schemaType);
                 }
@@ -391,6 +429,7 @@ public class OpenApiGenerator {
                 return "boolean";
             case "Date":
             case "LocalDate":
+            case "LocalDateTime":
                 return "string";
             default:
                 return "object";
@@ -403,7 +442,8 @@ public class OpenApiGenerator {
                type.equals("long") || type.equals("Long") ||
                type.equals("float") || type.equals("Float") ||
                type.equals("double") || type.equals("Double") ||
-               type.equals("boolean") || type.equals("Boolean");
+               type.equals("boolean") || type.equals("Boolean") ||
+               type.equals("Date") || type.equals("LocalDate") || type.equals("LocalDateTime");
     }
     
     private String extractGenericType(String type) {
@@ -413,17 +453,5 @@ public class OpenApiGenerator {
             return type.substring(start + 1, end).trim();
         }
         return "Object";
-    }
-    
-    private String sanitizeSchemaName(String name) {
-        // Remove package names and keep only simple class name
-        if (name.contains(".")) {
-            name = name.substring(name.lastIndexOf('.') + 1);
-        }
-        // Remove generic type parameters
-        if (name.contains("<")) {
-            name = name.substring(0, name.indexOf('<'));
-        }
-        return name;
     }
 }

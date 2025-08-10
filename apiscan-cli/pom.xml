@@ -30,6 +30,12 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!-- OpenAPI/Swagger Core -->
+        <dependency>
+            <groupId>io.swagger.core.v3</groupId>
+            <artifactId>swagger-core</artifactId>
+        </dependency>
+
         <!-- CLI -->
         <dependency>
             <groupId>info.picocli</groupId>

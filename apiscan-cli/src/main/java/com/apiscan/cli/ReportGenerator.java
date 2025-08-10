@@ -9,15 +9,26 @@ import java.util.stream.Collectors;
 public class ReportGenerator {
     
     public void printSummary(ScanResult result) {
-        System.out.println("📊 Scan Summary");
-        System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        printSummary(result, result.getScanDurationMs());
+    }
+    
+    public void printSummary(ScanResult result, long scanTimeMs) {
+        System.out.println();
+        System.out.println("=========================================================");
+        System.out.println("|                    SCAN SUMMARY                      |");
+        System.out.println("=========================================================");
         
         // Basic statistics
-        System.out.println("📁 Project: " + result.getProjectPath());
-        System.out.println("🔧 Framework: " + result.getFramework());
-        System.out.println("📝 Files scanned: " + result.getFilesScanned());
-        System.out.println("⏱️  Scan duration: " + result.getScanDurationMs() + " ms");
-        System.out.println("🎯 Total endpoints found: " + result.getEndpoints().size());
+        String projectName = result.getProjectPath().toString();
+        int lastSlash = Math.max(projectName.lastIndexOf('\\'), projectName.lastIndexOf('/'));
+        if (lastSlash >= 0 && lastSlash < projectName.length() - 1) {
+            projectName = projectName.substring(lastSlash + 1);
+        }
+        System.out.printf("Project:          %s%n", projectName);
+        System.out.printf("Framework:        %s%n", result.getFramework());
+        System.out.printf("Files scanned:    %,d%n", result.getFilesScanned());
+        System.out.printf("Duration:         %,d ms%n", scanTimeMs);
+        System.out.printf("Total endpoints:  %d%n", result.getEndpoints().size());
         
         // Group endpoints by HTTP method
         Map<String, Long> methodCounts = result.getEndpoints().stream()
@@ -27,12 +38,14 @@ public class ReportGenerator {
             ));
         
         if (!methodCounts.isEmpty()) {
-            System.out.println("\n📌 Endpoints by HTTP Method:");
+            System.out.println();
+            System.out.println("HTTP Methods:");
+            System.out.println("-----------------------------------------");
             methodCounts.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
                 .forEach(entry -> {
                     String icon = getMethodIcon(entry.getKey());
-                    System.out.printf("   %s %-8s: %d%n", icon, entry.getKey(), entry.getValue());
+                    System.out.printf("  %s %-8s %s%n", icon, entry.getKey(), String.format("%,d endpoints", entry.getValue()));
                 });
         }
         
@@ -41,12 +54,17 @@ public class ReportGenerator {
             .collect(Collectors.groupingBy(ApiEndpoint::getControllerClass));
         
         if (!byController.isEmpty()) {
-            System.out.println("\n📦 Endpoints by Controller:");
+            System.out.println();
+            System.out.println("Controllers:");
+            System.out.println("-----------------------------------------");
             byController.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
+                .sorted((a, b) -> Integer.compare(b.getValue().size(), a.getValue().size()))
                 .forEach(entry -> {
-                    System.out.printf("   • %-30s: %d endpoints%n", 
-                        entry.getKey(), entry.getValue().size());
+                    String controllerName = entry.getKey().length() > 35 ? 
+                        entry.getKey().substring(0, 32) + "..." : entry.getKey();
+                    System.out.printf("  [%s] %s%n", 
+                        String.format("%2d", entry.getValue().size()),
+                        controllerName);
                 });
         }
         
@@ -56,79 +74,99 @@ public class ReportGenerator {
             .collect(Collectors.toList());
         
         if (!deprecated.isEmpty()) {
-            System.out.println("\n⚠️  Deprecated Endpoints: " + deprecated.size());
+            System.out.println();
+            System.out.println("Deprecated Endpoints: " + deprecated.size());
+            System.out.println("-----------------------------------------");
             deprecated.forEach(endpoint -> {
-                System.out.printf("   • %s %s%n", 
+                System.out.printf("  [DEPRECATED] %s %s%n", 
                     endpoint.getHttpMethod(), endpoint.getPath());
             });
         }
         
         // Show errors if any
         if (!result.getErrors().isEmpty()) {
-            System.out.println("\n❌ Errors encountered:");
+            System.out.println();
+            System.out.println("Errors encountered:");
+            System.out.println("-----------------------------------------");
             result.getErrors().forEach(error -> {
-                System.out.println("   • " + error);
+                System.out.println("  [ERROR] " + error);
             });
         }
         
         // Show warnings if any
         if (!result.getWarnings().isEmpty()) {
-            System.out.println("\n⚠️  Warnings:");
+            System.out.println();
+            System.out.println("Warnings:");
+            System.out.println("-----------------------------------------");
             result.getWarnings().forEach(warning -> {
-                System.out.println("   • " + warning);
+                System.out.println("  [WARNING] " + warning);
             });
         }
         
         // List all endpoints
         if (!result.getEndpoints().isEmpty()) {
-            System.out.println("\n🔗 API Endpoints:");
-            System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            System.out.println();
+            System.out.println("=========================================================");
+            System.out.println("|                    API ENDPOINTS                     |");
+            System.out.println("=========================================================");
             
-            // Sort endpoints by path and method
-            List<ApiEndpoint> sortedEndpoints = result.getEndpoints().stream()
-                .sorted(Comparator.comparing(ApiEndpoint::getPath)
-                    .thenComparing(ApiEndpoint::getHttpMethod))
-                .collect(Collectors.toList());
-            
-            for (ApiEndpoint endpoint : sortedEndpoints) {
-                String methodIcon = getMethodIcon(endpoint.getHttpMethod());
-                String deprecatedFlag = endpoint.isDeprecated() ? " [DEPRECATED]" : "";
-                
-                System.out.printf("%s %-7s %-40s %s%s%n",
-                    methodIcon,
-                    endpoint.getHttpMethod(),
-                    truncate(endpoint.getPath(), 40),
-                    endpoint.getControllerClass() + "." + endpoint.getMethodName(),
-                    deprecatedFlag
-                );
-                
-                // Show parameters if verbose
-                if (!endpoint.getParameters().isEmpty()) {
-                    String params = endpoint.getParameters().stream()
-                        .map(p -> p.getName() + " (" + p.getIn() + ")")
-                        .collect(Collectors.joining(", "));
-                    System.out.println("         Parameters: " + params);
-                }
-            }
+            // Group and display by controller
+            byController.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(controllerEntry -> {
+                    System.out.println();
+                    System.out.println("Controller: " + controllerEntry.getKey());
+                    System.out.println("-".repeat(55));
+                    
+                    controllerEntry.getValue().stream()
+                        .sorted(Comparator.comparing(ApiEndpoint::getPath)
+                            .thenComparing(ApiEndpoint::getHttpMethod))
+                        .forEach(endpoint -> {
+                            String methodIcon = getMethodIcon(endpoint.getHttpMethod());
+                            String deprecatedFlag = endpoint.isDeprecated() ? " [DEPRECATED]" : "";
+                            
+                            System.out.printf("  %s %-7s %-35s %s%s%n",
+                                methodIcon,
+                                endpoint.getHttpMethod(),
+                                truncate(endpoint.getPath(), 35),
+                                endpoint.getMethodName(),
+                                deprecatedFlag
+                            );
+                            
+                            // Show parameters in a more compact format
+                            if (!endpoint.getParameters().isEmpty()) {
+                                String params = endpoint.getParameters().stream()
+                                    .map(p -> p.getName())
+                                    .collect(Collectors.joining(", "));
+                                if (params.length() > 50) {
+                                    params = params.substring(0, 47) + "...";
+                                }
+                                System.out.println("     Parameters: " + params);
+                            }
+                        });
+                });
         }
         
-        System.out.println("\n✅ Scan completed successfully!");
+        System.out.println();
+        System.out.println("=========================================================");
+        System.out.println("|             SCAN COMPLETED SUCCESSFULLY!             |");
+        System.out.println("=========================================================");
     }
     
     private String getMethodIcon(String method) {
         switch (method.toUpperCase()) {
             case "GET":
-                return "🔍";
+                return "[GET]";
             case "POST":
-                return "📤";
+                return "[POST]";
             case "PUT":
-                return "📝";
+                return "[PUT]";
             case "DELETE":
-                return "🗑️";
+                return "[DEL]";
             case "PATCH":
-                return "🔧";
+                return "[PATCH]";
             default:
-                return "📍";
+                return "[?]";
         }
     }
     

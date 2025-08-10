@@ -70,51 +70,68 @@ public class ApiScanCLI implements Callable<Integer> {
     public Integer call() throws Exception {
         Path path = Paths.get(projectPath).toAbsolutePath().normalize();
         
-        System.out.println("🔍 API Scanner - Analyzing project: " + path);
-        System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        System.out.println();
+        System.out.println("=========================================================");
+        System.out.println("|                   APISCAN v1.0.0                     |");
+        System.out.println("|            Enterprise API Endpoint Scanner           |");
+        System.out.println("=========================================================");
+        System.out.println();
+        System.out.println("[INFO] Analyzing project: " + path.getFileName());
+        System.out.println("[INFO] Location: " + path);
         
         // Detect framework
         String detectedFramework = detectFramework(path);
         if (detectedFramework == null) {
-            System.err.println("❌ No supported framework detected in the project");
-            System.err.println("   Supported frameworks: Spring MVC, Spring Boot");
+            System.out.println();
+            System.out.println("[ERROR] No supported framework detected");
+            System.out.println("        Supported frameworks: Spring MVC, Spring Boot");
+            System.out.println("        Please ensure your project contains a valid pom.xml or build.gradle");
             return 1;
         }
         
-        System.out.println("✅ Detected framework: " + detectedFramework);
+        System.out.println("[INFO] Framework detected: " + detectedFramework);
         
         // Find appropriate scanner
         FrameworkScanner scanner = findScanner(detectedFramework);
         if (scanner == null) {
-            System.err.println("❌ No scanner available for framework: " + detectedFramework);
+            System.out.println("[ERROR] No scanner available for framework: " + detectedFramework);
             return 1;
         }
         
         // Perform scan
-        System.out.println("🔄 Scanning for API endpoints...");
+        System.out.println("[INFO] Scanning for API endpoints...");
+        long startTime = System.currentTimeMillis();
         ScanResult result = scanner.scan(path);
+        long scanTime = System.currentTimeMillis() - startTime;
+        
+        // Print scan completion
+        System.out.println("[SUCCESS] Scan completed in " + scanTime + "ms");
+        System.out.println("[RESULT] Found " + result.getEndpoints().size() + " API endpoints");
         
         // Generate OpenAPI specification
-        String openApiSpec = openApiGenerator.generate(result, format);
-        
-        // Save to file if output path specified
-        if (outputPath != null) {
-            Path outputFile = Paths.get(outputPath);
-            openApiGenerator.saveToFile(openApiSpec, outputFile);
-            System.out.println("✅ OpenAPI specification saved to: " + outputFile.toAbsolutePath());
+        if (outputPath != null || verbose) {
+            System.out.println("[INFO] Generating OpenAPI specification...");
+            String openApiSpec = openApiGenerator.generate(result, format);
+            
+            // Save to file if output path specified
+            if (outputPath != null) {
+                Path outputFile = Paths.get(outputPath);
+                openApiGenerator.saveToFile(openApiSpec, outputFile);
+                System.out.println("[SUCCESS] OpenAPI specification saved: " + outputFile.getFileName());
+            }
+            
+            // Print spec to console if verbose and no output file
+            if (outputPath == null && verbose) {
+                System.out.println("\n" + "=".repeat(60));
+                System.out.println("OpenAPI Specification (" + format.toString().toUpperCase() + ")");
+                System.out.println("=".repeat(60));
+                System.out.println(openApiSpec);
+            }
         }
         
         // Show summary if requested
         if (showSummary) {
-            System.out.println();
-            reportGenerator.printSummary(result);
-        }
-        
-        // Print spec to console if no output file specified
-        if (outputPath == null && verbose) {
-            System.out.println("\n📄 OpenAPI Specification:");
-            System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            System.out.println(openApiSpec);
+            reportGenerator.printSummary(result, scanTime);
         }
         
         return 0;

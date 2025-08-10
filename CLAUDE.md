@@ -164,3 +164,104 @@ The APISCAN tool includes extensive test coverage for all major enterprise Sprin
 - **Real-world Validation**: Tested against production Spring projects
 - **Regression Testing**: Ensures existing functionality remains intact
 - **Edge Case Handling**: Unusual method names, complex generics, annotation variations
+
+## Enhanced User Experience
+
+### Professional CLI Output Formatting
+The APISCAN tool now features enterprise-grade console output with improved readability and professional presentation:
+
+#### Key Improvements
+1. **Professional Header Design**: Clean ASCII formatting and clear branding (Windows-compatible)
+   ```
+   =========================================================
+   |                   APISCAN v1.0.0                     |
+   |            Enterprise API Endpoint Scanner           |
+   =========================================================
+   ```
+
+2. **Clean Progress Indicators**: Clear status messages without verbose debug output
+   - Framework detection confirmation
+   - Scan progress with timing information
+   - Endpoint discovery count
+   - OpenAPI generation status
+
+3. **Structured Summary Reports**: Professionally formatted scan results
+   - **Project Information**: Clean project name extraction and framework details
+   - **Performance Metrics**: File scan counts and duration with proper number formatting
+   - **HTTP Method Breakdown**: Tabulated endpoint counts by method with icons
+   - **Controller Organization**: Sorted by endpoint count, easy to identify high-traffic controllers
+   - **Detailed Endpoint Listing**: Organized by controller with hierarchical display
+
+4. **Enhanced Data Visualization**:
+   - **HTTP Method Indicators**: [GET], [POST], [PUT], [DEL], [PATCH]
+   - **ASCII-Safe Formatting**: Cross-platform compatible console output
+   - **Parameter Display**: Compact parameter information without clutter
+   - **Deprecation Indicators**: Clear [DEPRECATED] marking of deprecated endpoints
+
+5. **Reduced Debug Noise**: 
+   - **Production Logging**: Debug information sent to log files, not console
+   - **Clean Console Output**: Only essential information displayed to users
+   - **Verbose Mode Available**: Full details accessible with `-v` flag when needed
+
+#### Example Professional Output
+```
+[INFO] Framework detected: Spring
+[INFO] Scanning for API endpoints...
+[SUCCESS] Scan completed in 1,266ms
+[RESULT] Found 35 API endpoints
+
+=========================================================
+|                    SCAN SUMMARY                      |
+=========================================================
+Project:          spring-petclinic-rest
+Framework:        Spring  
+Files scanned:    83
+Duration:         1,266 ms
+Total endpoints:  35
+
+HTTP Methods:
+-----------------------------------------
+  [DEL] DELETE   6 endpoints
+  [GET] GET      14 endpoints
+  [POST] POST     8 endpoints
+  [PUT] PUT      7 endpoints
+
+Controllers:
+-----------------------------------------
+  [ 9] OwnerRestController
+  [ 5] SpecialtyRestController
+  [ 5] VetRestController
+  [ 5] PetTypeRestController
+  [ 5] VisitRestController
+  [ 4] PetRestController
+  [ 1] UserRestController
+  [ 1] RootRestController
+
+=========================================================
+|             SCAN COMPLETED SUCCESSFULLY!             |
+=========================================================
+```
+
+### Output Format Testing
+Comprehensive test coverage for the enhanced output formatting:
+- **ReportGeneratorTest**: Complete test suite validating all formatting improvements
+- **ASCII-Safe Presentation**: Verification of cross-platform compatible formatting
+- **Content Organization**: Testing of tabular layouts and hierarchical displays  
+- **Edge Case Handling**: Long controller names, empty results, error scenarios
+- **Console Output Capture**: Systematic validation of all output sections
+
+### Cross-Platform Compatibility
+The enhanced output formatting addresses common Windows console encoding issues:
+- **ASCII-Safe Characters**: Replaced Unicode box-drawing and emoji with standard ASCII
+- **Windows Console Support**: Fully compatible with Windows Command Prompt and PowerShell
+- **Universal Display**: Consistent appearance across Windows, macOS, and Linux terminals
+- **Character Encoding Independent**: No dependency on UTF-8 console support
+- **Professional Appearance**: Maintains enterprise-grade visual quality with standard characters
+
+### User Experience Benefits
+1. **Professional Appearance**: Enterprise-grade console output suitable for business presentations
+2. **Information Density**: Maximum useful information in minimal screen space
+3. **Quick Scanning**: Easy to identify key metrics and problem areas at a glance
+4. **Consistent Formatting**: Standardized presentation across all scan results
+5. **Reduced Cognitive Load**: Clean, organized information hierarchy
+6. **Tool Credibility**: Professional appearance enhances user trust and adoption

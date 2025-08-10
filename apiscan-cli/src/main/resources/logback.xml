@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    
+    <!-- Console appender with clean formatting -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- File appender for debug information -->
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file>apiscan-debug.log</file>
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- Root logger - only show WARN and ERROR in console -->
+    <root level="WARN">
+        <appender-ref ref="CONSOLE" />
+    </root>
+    
+    <!-- Framework-specific loggers for debug to file only -->
+    <logger name="com.apiscan.framework" level="DEBUG" additivity="false">
+        <appender-ref ref="FILE" />
+    </logger>
+    
+    <!-- Core scanner loggers -->
+    <logger name="com.apiscan.core" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="FILE" />
+    </logger>
+    
+    <!-- CLI loggers - clean output -->
+    <logger name="com.apiscan.cli" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="FILE" />
+    </logger>
+    
+</configuration>

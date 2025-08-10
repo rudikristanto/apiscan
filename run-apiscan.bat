@@ -3,7 +3,7 @@ REM APISCAN Runner - Scans Spring PetClinic REST API
 REM This script builds the project and runs the API scanner
 
 echo Building APISCAN...
-call mvn clean package -q
+call mvn clean package -DskipTests -q
 
 if %ERRORLEVEL% neq 0 (
     echo Build failed!

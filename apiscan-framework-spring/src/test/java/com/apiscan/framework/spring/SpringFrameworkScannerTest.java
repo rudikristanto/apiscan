@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -499,6 +500,83 @@ class SpringFrameworkScannerTest {
         assertEquals(1, endpoints.stream().mapToInt(e -> e.getHttpMethod().equals("PUT") ? 1 : 0).sum());
         assertEquals(1, endpoints.stream().mapToInt(e -> e.getHttpMethod().equals("DELETE") ? 1 : 0).sum());
         assertEquals(1, endpoints.stream().mapToInt(e -> e.getHttpMethod().equals("PATCH") ? 1 : 0).sum());
+    }
+    
+    @Test
+    public void testRequestBodyDetectionInInferredEndpoints() throws IOException {
+        // Test that request body is properly detected for DTO parameters in inferred endpoints
+        Path tempDir = Files.createTempDirectory("test-request-body");
+        createTestProject(tempDir, "test-project");
+        
+        // Create controller implementing interface with DTO parameters
+        String ownerController = """
+            package com.example.controller;
+            
+            import org.springframework.web.bind.annotation.*;
+            import org.springframework.http.ResponseEntity;
+            import com.example.dto.OwnerFieldsDto;
+            import com.example.dto.OwnerDto;
+            
+            @RestController
+            @RequestMapping("/api/owners")
+            public class OwnerController implements OwnersApi {
+                
+                @Override
+                public ResponseEntity<OwnerDto> addOwner(OwnerFieldsDto ownerFields) {
+                    // Implementation
+                    return ResponseEntity.ok(new OwnerDto());
+                }
+                
+                @Override
+                public ResponseEntity<OwnerDto> updateOwner(Integer ownerId, OwnerFieldsDto ownerFields) {
+                    // Implementation  
+                    return ResponseEntity.ok(new OwnerDto());
+                }
+                
+                @Override
+                public ResponseEntity<OwnerDto> getOwner(Integer ownerId) {
+                    // Implementation
+                    return ResponseEntity.ok(new OwnerDto());
+                }
+            }
+            """;
+        
+        writeJavaFile(tempDir, "com/example/controller/OwnerController.java", ownerController);
+        
+        SpringFrameworkScanner scanner = new SpringFrameworkScanner();
+        ScanResult result = scanner.scan(tempDir);
+        
+        assertNotNull(result);
+        List<ApiEndpoint> endpoints = result.getEndpoints();
+        
+        // Find POST endpoint
+        Optional<ApiEndpoint> postEndpoint = endpoints.stream()
+            .filter(e -> e.getHttpMethod().equals("POST") && e.getPath().equals("/api/owners/owners"))
+            .findFirst();
+        
+        assertTrue(postEndpoint.isPresent(), "POST /api/owners/owners endpoint should exist");
+        assertNotNull(postEndpoint.get().getRequestBody(), "POST endpoint should have request body");
+        assertTrue(postEndpoint.get().getRequestBody().getContent().containsKey("application/json"));
+        assertEquals("OwnerFieldsDto", 
+            postEndpoint.get().getRequestBody().getContent().get("application/json").getSchema());
+        
+        // Find PUT endpoint  
+        Optional<ApiEndpoint> putEndpoint = endpoints.stream()
+            .filter(e -> e.getHttpMethod().equals("PUT") && e.getPath().contains("{"))
+            .findFirst();
+        
+        assertTrue(putEndpoint.isPresent(), "PUT endpoint should exist");
+        assertNotNull(putEndpoint.get().getRequestBody(), "PUT endpoint should have request body");
+        assertEquals("OwnerFieldsDto",
+            putEndpoint.get().getRequestBody().getContent().get("application/json").getSchema());
+        
+        // Verify GET endpoint has no request body
+        Optional<ApiEndpoint> getEndpoint = endpoints.stream()
+            .filter(e -> e.getHttpMethod().equals("GET") && e.getPath().contains("{"))
+            .findFirst();
+        
+        assertTrue(getEndpoint.isPresent(), "GET endpoint should exist");
+        assertNull(getEndpoint.get().getRequestBody(), "GET endpoint should not have request body");
     }
     
     private void createTestProject(Path tempDir, String projectName) throws IOException {

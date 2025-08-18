@@ -592,8 +592,14 @@ public class SpringFrameworkScanner implements FrameworkScanner {
             return Optional.empty();
         }
         
-        // If no annotation, it might be a simple type that Spring treats as request param
+        // If no annotation, check if it's a DTO type that should be request body
         String type = param.getTypeAsString();
+        if (isDtoType(type)) {
+            // This will be handled in extractRequestBody for POST/PUT/PATCH
+            return Optional.empty();
+        }
+        
+        // If no annotation and it's a simple type, Spring treats it as request param
         if (isSimpleType(type)) {
             apiParam.setIn("query");
             apiParam.setRequired(false);
@@ -653,16 +659,30 @@ public class SpringFrameworkScanner implements FrameworkScanner {
     }
     
     private void extractRequestBody(MethodDeclaration method, ApiEndpoint endpoint) {
+        String httpMethod = endpoint.getHttpMethod();
+        boolean isModifyingMethod = httpMethod != null && 
+            (httpMethod.equalsIgnoreCase("POST") || 
+             httpMethod.equalsIgnoreCase("PUT") || 
+             httpMethod.equalsIgnoreCase("PATCH"));
+        
         for (Parameter param : method.getParameters()) {
             boolean isRequestBody = param.getAnnotations().stream()
                 .anyMatch(ann -> ann.getNameAsString().equals("RequestBody"));
             
-            if (isRequestBody) {
+            String paramType = param.getTypeAsString();
+            
+            // Check if this is a request body parameter:
+            // 1. Has @RequestBody annotation, OR
+            // 2. For POST/PUT/PATCH methods without annotations, check if it's a DTO/complex type
+            boolean shouldBeRequestBody = isRequestBody || 
+                (isModifyingMethod && !isSimpleType(paramType) && !hasPathOrQueryAnnotation(param) && isDtoType(paramType));
+            
+            if (shouldBeRequestBody) {
                 ApiEndpoint.RequestBody body = new ApiEndpoint.RequestBody();
                 body.setRequired(true);
                 
                 ApiEndpoint.MediaType mediaType = new ApiEndpoint.MediaType();
-                mediaType.setSchema(param.getTypeAsString());
+                mediaType.setSchema(paramType);
                 
                 body.getContent().put("application/json", mediaType);
                 endpoint.setRequestBody(body);
@@ -672,6 +692,27 @@ public class SpringFrameworkScanner implements FrameworkScanner {
                 break;
             }
         }
+    }
+    
+    private boolean hasPathOrQueryAnnotation(Parameter param) {
+        return param.getAnnotations().stream()
+            .anyMatch(ann -> ann.getNameAsString().equals("PathVariable") || 
+                           ann.getNameAsString().equals("RequestParam") ||
+                           ann.getNameAsString().equals("RequestHeader"));
+    }
+    
+    private boolean isDtoType(String type) {
+        // Common patterns for DTOs and request/response objects
+        return type.endsWith("Dto") || 
+               type.endsWith("DTO") || 
+               type.endsWith("Request") || 
+               type.endsWith("Response") || 
+               type.endsWith("Model") ||
+               type.endsWith("Form") ||
+               type.endsWith("Input") ||
+               type.endsWith("Output") ||
+               type.endsWith("Payload") ||
+               (!isSimpleType(type) && !type.startsWith("java."));
     }
     
     private void extractResponseType(MethodDeclaration method, ApiEndpoint endpoint) {

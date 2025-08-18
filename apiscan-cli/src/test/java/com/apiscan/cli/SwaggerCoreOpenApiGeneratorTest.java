@@ -153,14 +153,22 @@ class SwaggerCoreOpenApiGeneratorTest {
         assertThat(listResponse.get("description").asText()).isEqualTo("List of owners");
         JsonNode arraySchema = listResponse.get("content").get("application/json").get("schema");
         assertThat(arraySchema.get("type").asText()).isEqualTo("array");
-        assertThat(arraySchema.get("items").get("type").asText()).isEqualTo("object");
+        JsonNode itemsSchema = arraySchema.get("items");
+        // Items can either be inline objects or references to DTO schemas
+        assertThat(itemsSchema).isNotNull();
+        boolean hasType = itemsSchema.has("type");
+        boolean hasRef = itemsSchema.has("$ref");
+        assertThat(hasType || hasRef).isTrue();
         
         // Check object response  
         JsonNode getEndpoint = pathsNode.get("/api/owners/{ownerId}").get("get");
         JsonNode objectResponse = getEndpoint.get("responses").get("200");
         assertThat(objectResponse.get("description").asText()).isEqualTo("Owner details");
         JsonNode objectSchema = objectResponse.get("content").get("application/json").get("schema");
-        assertThat(objectSchema.get("type").asText()).isEqualTo("object");
+        // Schema can either be inline object or reference to DTO schema
+        boolean objectHasType = objectSchema.has("type") && objectSchema.get("type").asText().equals("object");
+        boolean objectHasRef = objectSchema.has("$ref");
+        assertThat(objectHasType || objectHasRef).isTrue();
         
         // Check default response for endpoints without explicit responses
         JsonNode defaultEndpoint = pathsNode.get("/").get("get");
@@ -623,5 +631,313 @@ class SwaggerCoreOpenApiGeneratorTest {
         scanResult.addEndpoint(ownerEndpoint);
         
         return scanResult;
+    }
+
+    @Test
+    void shouldGenerateSchemaForRequestBodyDto(@TempDir Path tempDir) throws Exception {
+        // Given - Create a mock DTO file
+        Path dtoDir = tempDir.resolve("target/generated-sources/openapi/src/main/java/com/example");
+        Files.createDirectories(dtoDir);
+        
+        Path ownerDtoFile = dtoDir.resolve("OwnerFieldsDto.java");
+        Files.writeString(ownerDtoFile, createMockOwnerFieldsDto());
+        
+        // Create scan result with request body
+        ScanResult scanResult = createScanResultWithRequestBody(tempDir.toString());
+        
+        // When
+        String spec = generator.generate(scanResult, ApiScanCLI.OutputFormat.yaml);
+        
+        // Then
+        JsonNode node = yamlMapper.readTree(spec);
+        
+        // Check components section exists
+        JsonNode components = node.get("components");
+        assertThat(components).isNotNull();
+        
+        JsonNode schemas = components.get("schemas");
+        assertThat(schemas).isNotNull();
+        
+        // Check OwnerFieldsDto schema was generated
+        JsonNode ownerSchema = schemas.get("OwnerFieldsDto");
+        assertThat(ownerSchema).isNotNull();
+        assertThat(ownerSchema.get("type").asText()).isEqualTo("object");
+        
+        // Check request body references the schema
+        JsonNode postOp = node.get("paths").get("/api/owners").get("post");
+        JsonNode requestBody = postOp.get("requestBody");
+        assertThat(requestBody).isNotNull();
+        
+        JsonNode schema = requestBody.get("content").get("application/json").get("schema");
+        assertThat(schema.get("$ref").asText()).isEqualTo("#/components/schemas/OwnerFieldsDto");
+    }
+
+    @Test
+    void shouldGenerateSchemaForResponseDto(@TempDir Path tempDir) throws Exception {
+        // Given - Create mock DTO files
+        Path dtoDir = tempDir.resolve("target/generated-sources/openapi/src/main/java/com/example");
+        Files.createDirectories(dtoDir);
+        
+        Files.writeString(dtoDir.resolve("OwnerDto.java"), createMockOwnerDto());
+        
+        // Create scan result with response
+        ScanResult scanResult = createScanResultWithResponse(tempDir.toString());
+        
+        // When
+        String spec = generator.generate(scanResult, ApiScanCLI.OutputFormat.yaml);
+        
+        // Then
+        JsonNode node = yamlMapper.readTree(spec);
+        
+        // Check OwnerDto schema was generated
+        JsonNode schemas = node.get("components").get("schemas");
+        JsonNode ownerSchema = schemas.get("OwnerDto");
+        assertThat(ownerSchema).isNotNull();
+        
+        // Check response references the schema
+        JsonNode getOp = node.get("paths").get("/api/owners/{ownerId}").get("get");
+        JsonNode response = getOp.get("responses").get("200");
+        JsonNode responseSchema = response.get("content").get("application/json").get("schema");
+        assertThat(responseSchema.get("$ref").asText()).isEqualTo("#/components/schemas/OwnerDto");
+    }
+
+    @Test
+    void shouldGeneratePlaceholderForMissingDto() throws Exception {
+        // Given - Scan result with DTO that doesn't exist
+        ScanResult scanResult = createScanResultWithMissingDto();
+        
+        // When
+        String spec = generator.generate(scanResult, ApiScanCLI.OutputFormat.yaml);
+        
+        // Then
+        JsonNode node = yamlMapper.readTree(spec);
+        
+        // Check placeholder schema was created
+        JsonNode schemas = node.get("components").get("schemas");
+        JsonNode missingSchema = schemas.get("MissingDto");
+        assertThat(missingSchema).isNotNull();
+        assertThat(missingSchema.get("description").asText()).contains("Schema not available");
+        assertThat(missingSchema.get("properties").get("_schemaPlaceholder")).isNotNull();
+    }
+
+    @Test
+    void shouldHandleArrayResponsesWithDtoItems(@TempDir Path tempDir) throws Exception {
+        // Given - Create mock DTO 
+        Path dtoDir = tempDir.resolve("target/generated-sources/openapi/src/main/java/com/example");
+        Files.createDirectories(dtoDir);
+        Files.writeString(dtoDir.resolve("OwnerDto.java"), createMockOwnerDto());
+        
+        // Create scan result with List<OwnerDto> response
+        ScanResult scanResult = createScanResultWithListResponse(tempDir.toString());
+        
+        // When
+        String spec = generator.generate(scanResult, ApiScanCLI.OutputFormat.yaml);
+        
+        // Then
+        JsonNode node = yamlMapper.readTree(spec);
+        
+        // Check array response with DTO items
+        JsonNode getOp = node.get("paths").get("/api/owners").get("get");
+        JsonNode responseSchema = getOp.get("responses").get("200").get("content").get("application/json").get("schema");
+        
+        assertThat(responseSchema.get("type").asText()).isEqualTo("array");
+        assertThat(responseSchema.get("items").get("$ref").asText()).isEqualTo("#/components/schemas/OwnerDto");
+        
+        // Check OwnerDto schema exists in components
+        JsonNode ownerSchema = node.get("components").get("schemas").get("OwnerDto");
+        assertThat(ownerSchema).isNotNull();
+    }
+
+    private ScanResult createScanResultWithRequestBody(String projectPath) {
+        ScanResult scanResult = new ScanResult();
+        scanResult.setProjectPath(projectPath);
+        scanResult.setFramework("Spring");
+        scanResult.setScanDurationMs(1000);
+        
+        ApiEndpoint endpoint = new ApiEndpoint();
+        endpoint.setPath("/api/owners");
+        endpoint.setHttpMethod("POST");
+        endpoint.setOperationId("OwnerController_addOwner");
+        endpoint.setControllerClass("OwnerController");
+        
+        // Add request body with DTO
+        ApiEndpoint.RequestBody requestBody = new ApiEndpoint.RequestBody();
+        requestBody.setDescription("Owner data");
+        requestBody.setRequired(true);
+        
+        ApiEndpoint.MediaType mediaType = new ApiEndpoint.MediaType();
+        mediaType.setSchema("OwnerFieldsDto");
+        requestBody.getContent().put("application/json", mediaType);
+        
+        endpoint.setRequestBody(requestBody);
+        scanResult.addEndpoint(endpoint);
+        return scanResult;
+    }
+
+    private ScanResult createScanResultWithResponse(String projectPath) {
+        ScanResult scanResult = new ScanResult();
+        scanResult.setProjectPath(projectPath);
+        scanResult.setFramework("Spring");
+        scanResult.setScanDurationMs(1000);
+        
+        ApiEndpoint endpoint = new ApiEndpoint();
+        endpoint.setPath("/api/owners/{ownerId}");
+        endpoint.setHttpMethod("GET");
+        endpoint.setOperationId("OwnerController_getOwner");
+        endpoint.setControllerClass("OwnerController");
+        
+        // Add response with DTO
+        ApiEndpoint.Response response = new ApiEndpoint.Response();
+        response.setDescription("Owner details");
+        
+        ApiEndpoint.MediaType mediaType = new ApiEndpoint.MediaType();
+        mediaType.setSchema("OwnerDto");
+        response.getContent().put("application/json", mediaType);
+        
+        endpoint.getResponses().put("200", response);
+        scanResult.addEndpoint(endpoint);
+        return scanResult;
+    }
+
+    private ScanResult createScanResultWithMissingDto() {
+        ScanResult scanResult = new ScanResult();
+        scanResult.setProjectPath("/nonexistent/path");
+        scanResult.setFramework("Spring");
+        scanResult.setScanDurationMs(1000);
+        
+        ApiEndpoint endpoint = new ApiEndpoint();
+        endpoint.setPath("/api/missing");
+        endpoint.setHttpMethod("POST");
+        endpoint.setOperationId("TestController_missing");
+        endpoint.setControllerClass("TestController");
+        
+        // Add request body with missing DTO
+        ApiEndpoint.RequestBody requestBody = new ApiEndpoint.RequestBody();
+        requestBody.setRequired(true);
+        
+        ApiEndpoint.MediaType mediaType = new ApiEndpoint.MediaType();
+        mediaType.setSchema("MissingDto");
+        requestBody.getContent().put("application/json", mediaType);
+        
+        endpoint.setRequestBody(requestBody);
+        scanResult.addEndpoint(endpoint);
+        return scanResult;
+    }
+
+    private ScanResult createScanResultWithListResponse(String projectPath) {
+        ScanResult scanResult = new ScanResult();
+        scanResult.setProjectPath(projectPath);
+        scanResult.setFramework("Spring");
+        scanResult.setScanDurationMs(1000);
+        
+        ApiEndpoint endpoint = new ApiEndpoint();
+        endpoint.setPath("/api/owners");
+        endpoint.setHttpMethod("GET");
+        endpoint.setOperationId("OwnerController_listOwners");
+        endpoint.setControllerClass("OwnerController");
+        
+        // Add response with List<OwnerDto>
+        ApiEndpoint.Response response = new ApiEndpoint.Response();
+        response.setDescription("List of owners");
+        
+        ApiEndpoint.MediaType mediaType = new ApiEndpoint.MediaType();
+        mediaType.setSchema("List<OwnerDto>");
+        response.getContent().put("application/json", mediaType);
+        
+        endpoint.getResponses().put("200", response);
+        scanResult.addEndpoint(endpoint);
+        return scanResult;
+    }
+
+    private String createMockOwnerFieldsDto() {
+        return """
+            package com.example;
+            
+            import jakarta.validation.constraints.NotNull;
+            import jakarta.validation.constraints.Size;
+            import io.swagger.v3.oas.annotations.media.Schema;
+            
+            @Schema(name = "OwnerFields", description = "Owner editable fields")
+            public class OwnerFieldsDto {
+                
+                @NotNull
+                @Size(min = 1, max = 30)
+                private String firstName;
+                
+                @NotNull
+                @Size(min = 1, max = 30)
+                private String lastName;
+                
+                @NotNull
+                @Size(min = 1, max = 255)
+                private String address;
+                
+                @NotNull
+                @Size(min = 1, max = 80)
+                private String city;
+                
+                @NotNull
+                @Size(min = 1, max = 20)
+                private String telephone;
+                
+                // Getters and setters
+                public String getFirstName() { return firstName; }
+                public void setFirstName(String firstName) { this.firstName = firstName; }
+                
+                public String getLastName() { return lastName; }
+                public void setLastName(String lastName) { this.lastName = lastName; }
+                
+                public String getAddress() { return address; }
+                public void setAddress(String address) { this.address = address; }
+                
+                public String getCity() { return city; }
+                public void setCity(String city) { this.city = city; }
+                
+                public String getTelephone() { return telephone; }
+                public void setTelephone(String telephone) { this.telephone = telephone; }
+            }
+            """;
+    }
+
+    private String createMockOwnerDto() {
+        return """
+            package com.example;
+            
+            import io.swagger.v3.oas.annotations.media.Schema;
+            import java.util.List;
+            
+            @Schema(name = "Owner", description = "Complete owner representation")
+            public class OwnerDto {
+                private Integer id;
+                private String firstName;
+                private String lastName;
+                private String address;
+                private String city;
+                private String telephone;
+                private List<String> pets;
+                
+                // Getters and setters
+                public Integer getId() { return id; }
+                public void setId(Integer id) { this.id = id; }
+                
+                public String getFirstName() { return firstName; }
+                public void setFirstName(String firstName) { this.firstName = firstName; }
+                
+                public String getLastName() { return lastName; }
+                public void setLastName(String lastName) { this.lastName = lastName; }
+                
+                public String getAddress() { return address; }
+                public void setAddress(String address) { this.address = address; }
+                
+                public String getCity() { return city; }
+                public void setCity(String city) { this.city = city; }
+                
+                public String getTelephone() { return telephone; }
+                public void setTelephone(String telephone) { this.telephone = telephone; }
+                
+                public List<String> getPets() { return pets; }
+                public void setPets(List<String> pets) { this.pets = pets; }
+            }
+            """;
     }
 }

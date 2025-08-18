@@ -8,6 +8,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import io.swagger.v3.core.util.Json;
 import io.swagger.v3.core.util.Yaml;
+import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.PathItem;
@@ -36,6 +37,12 @@ import java.util.stream.Collectors;
  * This replaces the custom implementation to ensure full OpenAPI 3.0.3 compliance.
  */
 public class SwaggerCoreOpenApiGenerator {
+    
+    private final DtoSchemaResolver dtoSchemaResolver;
+    
+    public SwaggerCoreOpenApiGenerator() {
+        this.dtoSchemaResolver = null; // Will be initialized when needed
+    }
     
     public String generate(ScanResult scanResult, ApiScanCLI.OutputFormat format) {
         OpenAPI openApi = buildOpenApiSpec(scanResult);
@@ -68,15 +75,26 @@ public class SwaggerCoreOpenApiGenerator {
         // Add servers
         openApi.servers(buildServers());
         
-        // Build paths
+        // Initialize DTO schema resolver with project path
+        DtoSchemaResolver schemaResolver = new DtoSchemaResolver(scanResult.getProjectPath());
+        
+        // Build paths and collect DTO schemas
         Paths paths = new Paths();
         Set<String> usedTags = new HashSet<>();
+        Map<String, Schema> dtoSchemas = new HashMap<>();
         
         for (ApiEndpoint endpoint : scanResult.getEndpoints()) {
-            addEndpointToSpec(endpoint, paths, usedTags);
+            addEndpointToSpec(endpoint, paths, usedTags, schemaResolver, dtoSchemas);
         }
         
         openApi.paths(paths);
+        
+        // Add DTO schemas to components
+        if (!dtoSchemas.isEmpty()) {
+            Components components = new Components();
+            components.schemas(dtoSchemas);
+            openApi.components(components);
+        }
         
         // Add tags (only for tags that are actually used)
         List<Tag> tags = usedTags.stream()
@@ -115,7 +133,8 @@ public class SwaggerCoreOpenApiGenerator {
         return servers;
     }
     
-    private void addEndpointToSpec(ApiEndpoint endpoint, Paths paths, Set<String> usedTags) {
+    private void addEndpointToSpec(ApiEndpoint endpoint, Paths paths, Set<String> usedTags, 
+                                  DtoSchemaResolver schemaResolver, Map<String, Schema> dtoSchemas) {
         String path = normalizePath(endpoint.getPath());
         PathItem pathItem = paths.get(path);
         
@@ -124,7 +143,7 @@ public class SwaggerCoreOpenApiGenerator {
             paths.addPathItem(path, pathItem);
         }
         
-        Operation operation = buildOperation(endpoint, usedTags);
+        Operation operation = buildOperation(endpoint, usedTags, schemaResolver, dtoSchemas);
         
         // Set operation based on HTTP method
         switch (endpoint.getHttpMethod().toUpperCase()) {
@@ -169,7 +188,8 @@ public class SwaggerCoreOpenApiGenerator {
         return path;
     }
     
-    private Operation buildOperation(ApiEndpoint endpoint, Set<String> usedTags) {
+    private Operation buildOperation(ApiEndpoint endpoint, Set<String> usedTags, 
+                                    DtoSchemaResolver schemaResolver, Map<String, Schema> dtoSchemas) {
         Operation operation = new Operation();
         
         // Set operation ID
@@ -238,7 +258,7 @@ public class SwaggerCoreOpenApiGenerator {
         
         // Set request body
         if (endpoint.getRequestBody() != null) {
-            operation.requestBody(buildRequestBody(endpoint.getRequestBody()));
+            operation.requestBody(buildRequestBody(endpoint.getRequestBody(), schemaResolver, dtoSchemas));
         }
         
         // Set responses
@@ -250,7 +270,7 @@ public class SwaggerCoreOpenApiGenerator {
             responses.addApiResponse("200", defaultResponse);
         } else {
             for (Map.Entry<String, ApiEndpoint.Response> entry : endpoint.getResponses().entrySet()) {
-                responses.addApiResponse(entry.getKey(), buildResponse(entry.getValue()));
+                responses.addApiResponse(entry.getKey(), buildResponse(entry.getValue(), schemaResolver, dtoSchemas));
             }
         }
         operation.responses(responses);
@@ -338,7 +358,9 @@ public class SwaggerCoreOpenApiGenerator {
         return pathParamNames.contains(paramName);
     }
     
-    private io.swagger.v3.oas.models.parameters.RequestBody buildRequestBody(ApiEndpoint.RequestBody body) {
+    private io.swagger.v3.oas.models.parameters.RequestBody buildRequestBody(ApiEndpoint.RequestBody body, 
+                                                                                DtoSchemaResolver schemaResolver, 
+                                                                                Map<String, Schema> dtoSchemas) {
         io.swagger.v3.oas.models.parameters.RequestBody requestBody = new io.swagger.v3.oas.models.parameters.RequestBody();
         
         if (body.getDescription() != null && !body.getDescription().trim().isEmpty()) {
@@ -352,13 +374,7 @@ public class SwaggerCoreOpenApiGenerator {
             Schema<Object> schema = new Schema<>();
             
             String schemaType = entry.getValue().getSchema();
-            if (isPrimitiveType(schemaType)) {
-                schema.type(mapJavaTypeToOpenApiType(schemaType));
-            } else {
-                // Use generic object type with description
-                schema.type("object");
-                schema.description("Request body of type: " + schemaType);
-            }
+            schema = buildSchemaForType(schemaType, schemaResolver, dtoSchemas);
             
             mediaType.schema(schema);
             content.addMediaType(entry.getKey(), mediaType);
@@ -368,7 +384,9 @@ public class SwaggerCoreOpenApiGenerator {
         return requestBody;
     }
     
-    private ApiResponse buildResponse(ApiEndpoint.Response response) {
+    private ApiResponse buildResponse(ApiEndpoint.Response response, 
+                                      DtoSchemaResolver schemaResolver, 
+                                      Map<String, Schema> dtoSchemas) {
         ApiResponse apiResponse = new ApiResponse();
         String description = response.getDescription();
         if (description == null || description.trim().isEmpty()) {
@@ -383,23 +401,7 @@ public class SwaggerCoreOpenApiGenerator {
                 Schema<Object> schema = new Schema<>();
                 
                 String schemaType = entry.getValue().getSchema();
-                if (isPrimitiveType(schemaType)) {
-                    schema.type(mapJavaTypeToOpenApiType(schemaType));
-                } else if (schemaType.startsWith("List<") || schemaType.startsWith("Set<")) {
-                    schema.type("array");
-                    Schema<Object> itemSchema = new Schema<>();
-                    String itemType = extractGenericType(schemaType);
-                    if (isPrimitiveType(itemType)) {
-                        itemSchema.type(mapJavaTypeToOpenApiType(itemType));
-                    } else {
-                        itemSchema.type("object");
-                        itemSchema.description("Array item of type: " + itemType);
-                    }
-                    schema.items(itemSchema);
-                } else {
-                    schema.type("object");
-                    schema.description("Response of type: " + schemaType);
-                }
+                schema = buildSchemaForType(schemaType, schemaResolver, dtoSchemas);
                 
                 mediaType.schema(schema);
                 content.addMediaType(entry.getKey(), mediaType);
@@ -408,6 +410,87 @@ public class SwaggerCoreOpenApiGenerator {
         }
         
         return apiResponse;
+    }
+    
+    /**
+     * Build schema for a given type, handling DTOs, primitives, and collections.
+     */
+    @SuppressWarnings("unchecked")
+    private Schema<Object> buildSchemaForType(String typeName, DtoSchemaResolver schemaResolver, Map<String, Schema> dtoSchemas) {
+        if (typeName == null || typeName.trim().isEmpty()) {
+            Schema<Object> schema = new Schema<>();
+            schema.type("object");
+            schema.description("Unknown type");
+            return schema;
+        }
+        
+        // Handle primitive types
+        if (isPrimitiveType(typeName)) {
+            Schema<Object> schema = new Schema<>();
+            schema.type(mapJavaTypeToOpenApiType(typeName));
+            return schema;
+        }
+        
+        // Handle collections (List<>, Set<>, etc.)
+        if (typeName.startsWith("List<") || typeName.startsWith("Set<") || typeName.startsWith("Collection<")) {
+            Schema<Object> schema = new Schema<>();
+            schema.type("array");
+            String itemType = extractGenericType(typeName);
+            schema.items(buildSchemaForType(itemType, schemaResolver, dtoSchemas));
+            return schema;
+        }
+        
+        // Handle DTO classes - try to resolve schema
+        String className = extractClassName(typeName);
+        
+        // Check if we already processed this DTO
+        if (dtoSchemas.containsKey(className)) {
+            // Return reference to existing schema
+            Schema<Object> refSchema = new Schema<>();
+            refSchema.$ref("#/components/schemas/" + className);
+            return refSchema;
+        }
+        
+        // Resolve DTO schema
+        Schema<?> resolvedSchema = schemaResolver.resolveSchema(className);
+        if (resolvedSchema != null) {
+            dtoSchemas.put(className, resolvedSchema);
+            
+            // Return reference to the schema in components
+            Schema<Object> refSchema = new Schema<>();
+            refSchema.$ref("#/components/schemas/" + className);
+            return refSchema;
+        }
+        
+        // Fallback: create inline object schema
+        Schema<Object> schema = new Schema<>();
+        schema.type("object");
+        schema.description("Object of type: " + typeName);
+        return schema;
+    }
+    
+    /**
+     * Extract simple class name from fully qualified class name or generic type.
+     * Examples: 
+     * - "com.example.OwnerDto" -> "OwnerDto"
+     * - "OwnerDto" -> "OwnerDto" 
+     * - "ResponseEntity<OwnerDto>" -> "OwnerDto"
+     */
+    private String extractClassName(String typeName) {
+        // Handle generic types like ResponseEntity<OwnerDto>
+        if (typeName.contains("<") && typeName.contains(">")) {
+            String genericPart = extractGenericType(typeName);
+            if (!genericPart.equals("Object")) {
+                typeName = genericPart;
+            }
+        }
+        
+        // Extract simple class name from fully qualified name
+        if (typeName.contains(".")) {
+            return typeName.substring(typeName.lastIndexOf('.') + 1);
+        }
+        
+        return typeName;
     }
     
     private String mapJavaTypeToOpenApiType(String javaType) {

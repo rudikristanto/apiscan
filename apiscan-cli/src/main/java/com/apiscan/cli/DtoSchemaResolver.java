@@ -187,10 +187,7 @@ public class DtoSchemaResolver {
             String fieldName = var.getNameAsString();
             String fieldType = var.getTypeAsString();
             
-            Schema<Object> fieldSchema = new Schema<>();
-            
-            // Set type based on Java type
-            setSchemaType(fieldSchema, fieldType);
+            Schema<Object> fieldSchema = buildFieldSchema(fieldType);
             
             // Check for validation annotations to determine if required
             boolean isRequired = hasRequiredAnnotation(field);
@@ -198,14 +195,101 @@ public class DtoSchemaResolver {
                 required.add(fieldName);
             }
             
-            // Add field description if available
-            String fieldDescription = extractFieldDescription(field, fieldName, fieldType);
-            if (fieldDescription != null) {
-                fieldSchema.description(fieldDescription);
+            // Add field description if available (only if not already set by buildFieldSchema)
+            if (fieldSchema.getDescription() == null) {
+                String fieldDescription = extractFieldDescription(field, fieldName, fieldType);
+                if (fieldDescription != null) {
+                    fieldSchema.description(fieldDescription);
+                }
             }
             
             properties.put(fieldName, fieldSchema);
         }
+    }
+    
+    /**
+     * Build schema for a field, handling DTO references properly.
+     */
+    private Schema<Object> buildFieldSchema(String fieldType) {
+        Schema<Object> fieldSchema = new Schema<>();
+        
+        if (isPrimitiveType(fieldType)) {
+            setSchemaType(fieldSchema, fieldType);
+        } else if (isCollectionType(fieldType)) {
+            fieldSchema.type("array");
+            String itemType = extractGenericType(fieldType);
+            Schema<Object> itemSchema = buildFieldSchema(itemType);
+            fieldSchema.items(itemSchema);
+        } else {
+            // Check if this is a DTO class that should be referenced
+            String simpleClassName = extractSimpleClassName(fieldType);
+            if (isDtoClass(simpleClassName)) {
+                // Create a reference to the DTO schema
+                fieldSchema.$ref("#/components/schemas/" + simpleClassName);
+            } else {
+                // Fall back to generic object description
+                fieldSchema.type("object");
+                fieldSchema.description("Object of type: " + fieldType);
+            }
+        }
+        
+        return fieldSchema;
+    }
+    
+    /**
+     * Check if the given type is a primitive type.
+     */
+    private boolean isPrimitiveType(String type) {
+        return type.equals("String") || 
+               type.equals("Integer") || type.equals("int") ||
+               type.equals("Long") || type.equals("long") ||
+               type.equals("Double") || type.equals("double") ||
+               type.equals("Float") || type.equals("float") ||
+               type.equals("Boolean") || type.equals("boolean") ||
+               type.equals("BigDecimal") ||
+               type.equals("Date") || type.equals("LocalDate") || 
+               type.equals("LocalDateTime") || type.equals("Instant");
+    }
+    
+    /**
+     * Check if the given type is a collection type.
+     */
+    private boolean isCollectionType(String type) {
+        return type.startsWith("List<") || type.startsWith("Set<") || 
+               type.startsWith("Collection<") || type.equals("List") || 
+               type.equals("Set") || type.equals("Collection");
+    }
+    
+    /**
+     * Extract simple class name from type (com.example.PetTypeDto -> PetTypeDto).
+     */
+    private String extractSimpleClassName(String type) {
+        // Remove generic parameters
+        if (type.contains("<")) {
+            type = type.substring(0, type.indexOf("<"));
+        }
+        
+        // Extract simple name
+        if (type.contains(".")) {
+            return type.substring(type.lastIndexOf('.') + 1);
+        }
+        
+        return type;
+    }
+    
+    /**
+     * Check if a class name represents a DTO that should be referenced.
+     */
+    private boolean isDtoClass(String className) {
+        // Common DTO naming patterns
+        return className.endsWith("Dto") || 
+               className.endsWith("DTO") || 
+               className.endsWith("Response") || 
+               className.endsWith("Request") || 
+               className.endsWith("Entity") ||
+               className.endsWith("Model") ||
+               // Check if we've already resolved this schema
+               schemaCache.containsKey(className);
     }
     
     /**

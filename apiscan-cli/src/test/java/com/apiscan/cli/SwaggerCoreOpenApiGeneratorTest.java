@@ -173,7 +173,7 @@ class SwaggerCoreOpenApiGeneratorTest {
         // Check default response for endpoints without explicit responses
         JsonNode defaultEndpoint = pathsNode.get("/").get("get");
         JsonNode defaultResponse = defaultEndpoint.get("responses").get("200");
-        assertThat(defaultResponse.get("description").asText()).isEqualTo("Successful operation");
+        assertThat(defaultResponse.get("description").asText()).isEqualTo("List of resources returned successfully.");
     }
 
     @Test
@@ -939,5 +939,85 @@ class SwaggerCoreOpenApiGeneratorTest {
                 public void setPets(List<String> pets) { this.pets = pets; }
             }
             """;
+    }
+    
+    @Test
+    void testEnhancedOpenApiFeatures() throws Exception {
+        ScanResult result = createScanResultWithPathParameters();
+        SwaggerCoreOpenApiGenerator generator = new SwaggerCoreOpenApiGenerator();
+        
+        String yaml = generator.generate(result, ApiScanCLI.OutputFormat.yaml);
+        assertThat(yaml).isNotEmpty();
+        
+        ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+        JsonNode rootNode = yamlMapper.readTree(yaml);
+        
+        // Test auto-generated summaries and descriptions
+        JsonNode pathsNode = rootNode.get("paths");
+        assertThat(pathsNode).isNotNull();
+        
+        // Test GET /api/owners (list operation)
+        JsonNode ownersPath = pathsNode.get("/api/owners");
+        if (ownersPath != null && ownersPath.has("get")) {
+            JsonNode getOperation = ownersPath.get("get");
+            assertThat(getOperation.get("summary").asText()).isEqualTo("List owners");
+            assertThat(getOperation.get("description").asText()).isEqualTo("Returns an array of owners.");
+        }
+        
+        // Test GET /api/owners/{ownerId} (single resource operation)
+        JsonNode ownerByIdPath = pathsNode.get("/api/owners/{ownerId}");
+        if (ownerByIdPath != null && ownerByIdPath.has("get")) {
+            JsonNode getOperation = ownerByIdPath.get("get");
+            assertThat(getOperation.get("summary").asText()).isEqualTo("Get a owner by ID");
+            assertThat(getOperation.get("description").asText()).isEqualTo("Returns the owner or a 404 error.");
+        }
+        
+        // Test POST operation
+        if (ownersPath != null && ownersPath.has("post")) {
+            JsonNode postOperation = ownersPath.get("post");
+            assertThat(postOperation.get("summary").asText()).isEqualTo("Create a owner");
+            assertThat(postOperation.get("description").asText()).isEqualTo("Creates a owner.");
+        }
+        
+        // Test multiple response codes
+        if (ownerByIdPath != null && ownerByIdPath.has("get")) {
+            JsonNode getOperation = ownerByIdPath.get("get");
+            JsonNode responses = getOperation.get("responses");
+            
+            // Should have multiple response codes
+            assertThat(responses.has("200")).isTrue();
+            assertThat(responses.has("400")).isTrue();
+            assertThat(responses.has("404")).isTrue();
+            assertThat(responses.has("500")).isTrue();
+            
+            // Check response descriptions
+            assertThat(responses.get("200").get("description").asText()).isEqualTo("owner details found and returned.");
+            assertThat(responses.get("404").get("description").asText()).isEqualTo("owner not found.");
+        }
+        
+        // Test parameter descriptions and constraints
+        if (ownerByIdPath != null && ownerByIdPath.has("get")) {
+            JsonNode getOperation = ownerByIdPath.get("get");
+            if (getOperation.has("parameters")) {
+                JsonNode parameters = getOperation.get("parameters");
+                for (JsonNode param : parameters) {
+                    if ("path".equals(param.get("in").asText()) && "ownerId".equals(param.get("name").asText())) {
+                        assertThat(param.get("description").asText()).isEqualTo("The ID of the owner.");
+                        JsonNode schema = param.get("schema");
+                        assertThat(schema.get("type").asText()).isEqualTo("integer");
+                        assertThat(schema.get("format").asText()).isEqualTo("int32");
+                        assertThat(schema.get("minimum").asInt()).isEqualTo(0);
+                    }
+                }
+            }
+        }
+        
+        // Test POST response code (should be 201)
+        if (ownersPath != null && ownersPath.has("post")) {
+            JsonNode postOperation = ownersPath.get("post");
+            JsonNode responses = postOperation.get("responses");
+            assertThat(responses.has("201")).isTrue();
+            assertThat(responses.get("201").get("description").asText()).isEqualTo("Resource created successfully.");
+        }
     }
 }

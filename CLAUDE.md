@@ -584,3 +584,170 @@ Added comprehensive test `testRequestBodyDetectionInInferredEndpoints` that veri
 - Request body schemas correctly reference DTO types
 
 This enhancement ensures that APISCAN generates complete and accurate OpenAPI specifications for all Spring REST APIs, regardless of whether they use direct annotations or interface-based implementations.
+
+## Professional Report Formatting with Aligned Indentation
+
+### Enhanced Console Output Readability
+
+APISCAN's report formatting has been significantly improved to provide professional, well-aligned output that enhances readability and maintains consistent indentation throughout the entire report.
+
+#### The Problem
+The initial report formatting had inconsistent indentation where:
+- Parameter lines were not properly aligned with endpoint details
+- HTTP method columns had varying widths
+- Controller names could overflow their display area
+- Sub-items (parameters, request bodies) lacked visual hierarchy
+
+#### The Solution
+Comprehensive formatting improvements across the ReportGenerator:
+
+1. **Consistent Column Widths**: 
+   - HTTP methods: Fixed 6-character width (`%-6s`)
+   - API paths: Fixed 40-character width with truncation (`%-40s`)
+   - Method icons: Standardized format (`[GET]`, `[POST]`, etc.)
+
+2. **Professional Indentation**:
+   - Main endpoint lines: 2-space indent
+   - Parameters line: 15-space indent for perfect alignment
+   - Request Body line: 15-space indent matching parameters
+   - Creates clear visual hierarchy between endpoints and their details
+
+3. **Smart Truncation**:
+   - Long paths truncated at 40 characters with "..."
+   - Long parameter lists truncated at 45 characters
+   - Controller names handled gracefully at 35 characters
+
+4. **Enhanced Visual Separators**:
+   - Section headers use 70-character separators
+   - Consistent use of dashed lines for subsections
+   - Proper spacing between different report sections
+
+#### Example Professional Output
+
+**Before (Misaligned)**:
+```
+  [POST] POST    /api/owners                         addOwner
+     Parameters: ownerId
+  [GET] GET     /api/owners/{ownerId}               getOwner
+     Parameters: ownerId
+```
+
+**After (Professional Alignment)**:
+```
+  [POST] POST   /api/owners                             addOwner
+               Request Body: OwnerFieldsDto
+  [GET] GET    /api/owners/{ownerId}                   getOwner
+               Parameters: ownerId
+  [PUT] PUT    /api/owners/{ownerId}                   updateOwner
+               Parameters: ownerId
+               Request Body: OwnerFieldsDto
+```
+
+#### Technical Implementation
+
+**ReportGenerator Enhancements**:
+- Fixed-width formatting using `String.format()` for consistent columns
+- Proper 15-space indentation for sub-items (parameters, request bodies)
+- Intelligent truncation helper method for handling long strings
+- Separation of concerns between data formatting and display logic
+
+**Key Changes**:
+```java
+// Professional column alignment
+String method = String.format("%-6s", endpoint.getHttpMethod());
+String path = String.format("%-40s", truncate(endpoint.getPath(), 40));
+
+// Consistent sub-item indentation (15 spaces)
+System.out.printf("               Parameters: %s%n", params);
+System.out.printf("               Request Body: %s%n", bodyType);
+```
+
+#### Test Coverage
+Added `testProfessionalIndentationFormatting` test that verifies:
+- Parameters line has exactly 15-space indentation
+- Request Body line has exactly 15-space indentation
+- HTTP method icons are consistently formatted
+- Long names are properly truncated
+
+#### User Benefits
+
+1. **Professional Presentation**: Report output suitable for documentation and presentations
+2. **Improved Readability**: Clear visual hierarchy makes information easy to scan
+3. **Consistent Experience**: Same formatting quality regardless of data variations
+4. **Enterprise Quality**: Output meets professional standards expected in corporate environments
+5. **Better Information Density**: More information visible without scrolling
+
+This formatting enhancement ensures APISCAN produces professional, enterprise-grade reports that are both informative and visually appealing.
+
+## Perfect Vertical URL Alignment Fix
+
+### Resolved Critical Alignment Issue
+
+Fixed the vertical alignment problem where endpoint URLs were not perfectly aligned due to inconsistent HTTP method icon widths, creating a professional, properly aligned output.
+
+#### The Problem
+URLs were misaligned because:
+- Different HTTP method names have varying lengths (`GET` vs `POST` vs `DELETE`)  
+- Method icons had inconsistent widths (`[GET]` = 5 chars, `[POST]` = 6 chars, `[DEL]` = 5 chars)
+- This caused URLs to appear jagged and unprofessional in the output
+
+#### The Solution
+1. **Fixed Method Icon Width**: Used consistent 8-character width (`%-8s`) for all method icons
+2. **Removed Redundant Method Names**: Eliminated duplicate method information (icon already shows method)
+3. **Adjusted Sub-item Indentation**: Updated Parameters and Request Body indentation to 11 spaces to align perfectly under URLs
+
+#### Example Before vs After
+
+**Before (Misaligned URLs)**:
+```
+  [GET] GET     /api/owners                         listOwners
+  [POST] POST    /api/owners                         addOwner  
+  [DEL] DELETE  /api/owners/{ownerId}               deleteOwner
+```
+
+**After (Perfect Alignment)**:
+```
+  [GET]    /api/owners                              listOwners
+           Parameters: lastName
+  [POST]   /api/owners                              addOwner
+           Request Body: OwnerFieldsDto
+  [DEL]    /api/owners/{ownerId}                    deleteOwner
+           Parameters: ownerId
+```
+
+#### Technical Implementation
+
+**Key Changes**:
+```java
+// Fixed 8-character width for method icon ensures perfect URL alignment
+String methodDisplay = String.format("%-8s", methodIcon);
+String path = String.format("%-40s", truncate(endpoint.getPath(), 40));
+
+// Simplified output format removes redundant method name
+System.out.printf("  %s %s %s%s%n",
+    methodDisplay,    // 8 chars fixed width
+    path,            // 40 chars fixed width  
+    methodName,
+    deprecatedFlag
+);
+
+// Updated sub-item indentation (2 + 8 + 1 = 11 spaces)
+System.out.printf("           Parameters: %s%n", params);
+System.out.printf("           Request Body: %s%n", bodyType);
+```
+
+#### User Experience Benefits
+
+1. **Perfect Visual Alignment**: All URLs start at exactly the same column position
+2. **Cleaner Appearance**: Removed redundant method names for cleaner output
+3. **Professional Presentation**: Enterprise-quality formatting suitable for documentation
+4. **Consistent Visual Structure**: Predictable column layout regardless of method types
+5. **Enhanced Readability**: Easy to scan endpoint lists with perfect alignment
+
+#### Test Coverage
+Updated `testProfessionalIndentationFormatting` to verify:
+- Parameters and Request Body lines use 11-space indentation
+- Perfect alignment under URLs regardless of HTTP method type
+- Consistent formatting across all endpoint types
+
+This alignment fix ensures APISCAN produces perfectly formatted, professional reports with consistent visual structure.

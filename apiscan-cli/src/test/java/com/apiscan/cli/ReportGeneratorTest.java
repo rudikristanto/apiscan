@@ -9,6 +9,7 @@ import org.junit.jupiter.api.AfterEach;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -203,6 +204,68 @@ class ReportGeneratorTest {
         // Should handle long names gracefully
         assertTrue(output.contains("VeryLongControllerNameThatExceedsTheDisplay") || output.contains("..."), 
             "Should truncate long controller names or handle them gracefully");
+    }
+    
+    @Test
+    void testProfessionalIndentationFormatting() {
+        // Test that indentation is consistent and professional
+        ScanResult result = createTestScanResult();
+        
+        // Add endpoint with parameters and request body
+        ApiEndpoint complexEndpoint = new ApiEndpoint();
+        complexEndpoint.setPath("/api/owners/{ownerId}");
+        complexEndpoint.setHttpMethod("PUT");
+        complexEndpoint.setMethodName("updateOwner");
+        complexEndpoint.setControllerClass("OwnerController");
+        
+        ApiEndpoint.Parameter ownerIdParam = new ApiEndpoint.Parameter();
+        ownerIdParam.setName("ownerId");
+        ownerIdParam.setIn("path");
+        ownerIdParam.setRequired(true);
+        complexEndpoint.setParameters(Arrays.asList(ownerIdParam));
+        
+        ApiEndpoint.RequestBody requestBody = new ApiEndpoint.RequestBody();
+        requestBody.setRequired(true);
+        ApiEndpoint.MediaType mediaType = new ApiEndpoint.MediaType();
+        mediaType.setSchema("OwnerFieldsDto");
+        requestBody.getContent().put("application/json", mediaType);
+        complexEndpoint.setRequestBody(requestBody);
+        
+        // Create a mutable list with the new endpoint
+        List<ApiEndpoint> endpoints = new ArrayList<>(result.getEndpoints());
+        endpoints.add(complexEndpoint);
+        result.setEndpoints(endpoints);
+        
+        reportGenerator.printSummary(result);
+        
+        String output = outputStream.toString();
+        String[] lines = output.split("\n");
+        
+        // Verify proper alignment in endpoint details
+        boolean foundParameterLine = false;
+        boolean foundRequestBodyLine = false;
+        
+        for (String line : lines) {
+            if (line.contains("Parameters:")) {
+                foundParameterLine = true;
+                // Check that Parameters line has consistent indentation (11 spaces to align under URL)
+                assertTrue(line.startsWith("           Parameters:"), 
+                    "Parameters line should have 11-space indentation to align under URL");
+            }
+            if (line.contains("Request Body:")) {
+                foundRequestBodyLine = true;
+                // Check that Request Body line has consistent indentation (11 spaces to align under URL)
+                assertTrue(line.startsWith("           Request Body:"), 
+                    "Request Body line should have 11-space indentation to align under URL");
+            }
+        }
+        
+        assertTrue(foundParameterLine, "Should display parameters with proper indentation");
+        assertTrue(foundRequestBodyLine, "Should display request body with proper indentation");
+        
+        // Verify HTTP method formatting is consistent
+        assertTrue(output.contains("[GET]") || output.contains("[POST]") || output.contains("[PUT]") || output.contains("[DEL]"),
+            "Should use consistent method icons");
     }
     
     private ScanResult createTestScanResult() {

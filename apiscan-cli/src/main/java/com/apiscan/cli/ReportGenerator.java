@@ -45,7 +45,10 @@ public class ReportGenerator {
                 .sorted(Map.Entry.comparingByKey())
                 .forEach(entry -> {
                     String icon = getMethodIcon(entry.getKey());
-                    System.out.printf("  %s %-8s %s%n", icon, entry.getKey(), String.format("%,d endpoints", entry.getValue()));
+                    System.out.printf("  %-7s %-8s %2d endpoints%n", 
+                        icon, 
+                        entry.getKey(), 
+                        entry.getValue());
                 });
         }
         
@@ -60,11 +63,10 @@ public class ReportGenerator {
             byController.entrySet().stream()
                 .sorted((a, b) -> Integer.compare(b.getValue().size(), a.getValue().size()))
                 .forEach(entry -> {
-                    String controllerName = entry.getKey().length() > 35 ? 
-                        entry.getKey().substring(0, 32) + "..." : entry.getKey();
-                    System.out.printf("  [%s] %s%n", 
-                        String.format("%2d", entry.getValue().size()),
-                        controllerName);
+                    String controllerName = entry.getKey();
+                    System.out.printf("  [%2d] %-35s%n", 
+                        entry.getValue().size(),
+                        truncate(controllerName, 35));
                 });
         }
         
@@ -116,7 +118,7 @@ public class ReportGenerator {
                 .forEach(controllerEntry -> {
                     System.out.println();
                     System.out.println("Controller: " + controllerEntry.getKey());
-                    System.out.println("-".repeat(55));
+                    System.out.println("-".repeat(70));
                     
                     controllerEntry.getValue().stream()
                         .sorted(Comparator.comparing(ApiEndpoint::getPath)
@@ -125,23 +127,39 @@ public class ReportGenerator {
                             String methodIcon = getMethodIcon(endpoint.getHttpMethod());
                             String deprecatedFlag = endpoint.isDeprecated() ? " [DEPRECATED]" : "";
                             
-                            System.out.printf("  %s %-7s %-35s %s%s%n",
-                                methodIcon,
-                                endpoint.getHttpMethod(),
-                                truncate(endpoint.getPath(), 35),
-                                endpoint.getMethodName(),
+                            // Format the main endpoint line with proper alignment
+                            // Use fixed 8-char width for method icon to ensure URL alignment
+                            String methodDisplay = String.format("%-8s", methodIcon);
+                            String path = String.format("%-40s", truncate(endpoint.getPath(), 40));
+                            String methodName = endpoint.getMethodName();
+                            
+                            System.out.printf("  %s %s %s%s%n",
+                                methodDisplay,
+                                path,
+                                methodName,
                                 deprecatedFlag
                             );
                             
-                            // Show parameters in a more compact format
+                            // Show parameters with proper indentation
                             if (!endpoint.getParameters().isEmpty()) {
                                 String params = endpoint.getParameters().stream()
                                     .map(p -> p.getName())
                                     .collect(Collectors.joining(", "));
-                                if (params.length() > 50) {
-                                    params = params.substring(0, 47) + "...";
+                                if (params.length() > 45) {
+                                    params = params.substring(0, 42) + "...";
                                 }
-                                System.out.println("     Parameters: " + params);
+                                // Use 11-space indentation to align under the URL
+                                System.out.printf("           Parameters: %s%n", params);
+                            }
+                            
+                            // Show request body if present
+                            if (endpoint.getRequestBody() != null && !endpoint.getRequestBody().getContent().isEmpty()) {
+                                String bodyType = endpoint.getRequestBody().getContent().values().stream()
+                                    .findFirst()
+                                    .map(media -> media.getSchema())
+                                    .orElse("Unknown");
+                                // Use 11-space indentation to align under the URL
+                                System.out.printf("           Request Body: %s%n", bodyType);
                             }
                         });
                 });

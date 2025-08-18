@@ -67,220 +67,53 @@ The Spring framework scanner supports multiple approaches for API endpoint detec
 
 ## Test Coverage
 
-### Comprehensive Test Suite
-The APISCAN tool includes extensive test coverage for all major enterprise Spring Java application scenarios:
+### Enterprise API Pattern Tests
+1. **Direct Annotation-Based APIs**: Controllers with Spring mapping annotations
+2. **Interface-Based APIs with Available Definitions**: Controllers implementing interfaces that contain Spring annotations
+3. **Interface-Based APIs with Missing Definitions (@Override Inference)**: Controllers implementing external interfaces (JAR dependencies, generated code)
+4. **Mixed Implementation Scenarios**: Projects combining both direct annotation and interface-based controllers
+5. **Complex Nested Resource Hierarchies**: Multi-level REST resource relationships
+6. **HTTP Method and Annotation Variations**: All Spring annotation types and parameter combinations
+7. **CLI Integration Testing**: End-to-end command-line interface testing
 
-#### Core Component Tests
-- **JavaSourceParserTest**: AST parsing functionality, file handling, error scenarios
-- **ApiEndpointTest**: Data model validation, parameter handling, request/response structures
-
-#### Enterprise API Pattern Tests
-1. **Direct Annotation-Based APIs**
-   - Controllers with Spring mapping annotations (`@GetMapping`, `@PostMapping`, etc.)
-   - Standard RESTful CRUD operations
-   - Path parameter and request body handling
-   - Example: `@RestController` with `@RequestMapping("/api/users")`
-
-2. **Interface-Based APIs with Available Definitions**
-   - Controllers implementing interfaces that contain Spring annotations
-   - Contract-first development patterns
-   - OpenAPI code generation scenarios
-   - Example: `ProductController implements ProductsApi` where `ProductsApi` has annotations
-
-3. **Interface-Based APIs with Missing Definitions (@Override Inference)**
-   - Controllers implementing external interfaces (JAR dependencies, generated code)
-   - Intelligent endpoint inference from method names and parameters
-   - Method pattern recognition (`listOrders` → GET, `addOrder` → POST, `deleteOrder` → DELETE)
-   - Path construction from method signatures (`getOrder(Integer orderId)` → `/orders/{orderId}`)
-   - Example: Real-world scenario like spring-petclinic-rest project
-
-4. **Mixed Implementation Scenarios**
-   - Projects combining both direct annotation and interface-based controllers
-   - Multiple architectural patterns within the same codebase
-   - Different teams using different approaches
-
-5. **Complex Nested Resource Hierarchies**
-   - Multi-level REST resource relationships
-   - Enterprise-grade resource structures
-   - Examples: 
-     - `companies/{id}/departments/{id}/employees/{id}/projects`
-     - `owners/{id}/pets/{id}/visits`
-   - Intelligent nested path inference from method names
-
-6. **HTTP Method and Annotation Variations**
-   - `@RequestMapping` with method parameters
-   - Specialized annotations (`@GetMapping`, `@PostMapping`, `@PutMapping`, `@DeleteMapping`, `@PatchMapping`)
-   - Parameter annotations (`@PathVariable`, `@RequestParam`, `@RequestBody`, `@RequestHeader`)
-   - Security annotations (`@PreAuthorize`) - handled gracefully
-
-7. **CLI Integration Testing**
-   - End-to-end command-line interface testing
-   - Output format validation (JSON/YAML)
-   - Error handling and edge cases
-   - Real project scanning verification
-
-#### Test Scenarios Covering Enterprise Requirements
-
-**Scenario 1: Legacy Enterprise Application**
-- Mixed direct annotations and interface implementations
-- Complex business domain models
-- Multi-module Maven projects
-- Security-enabled endpoints
-
-**Scenario 2: Microservices Architecture**
-- Contract-first API development
-- Generated client/server stubs
-- Interface definitions in separate modules
-- Cross-service communication patterns
-
-**Scenario 3: Code Generation Workflows**
-- OpenAPI specification → Java code generation
-- Missing interface source code (JAR dependencies)
-- Method signature-based endpoint inference
-- Automated documentation generation
-
-**Scenario 4: Migration Projects**
-- Gradual migration from older frameworks
-- Mixed annotation styles within controllers
-- Backward compatibility requirements
-- Documentation catch-up scenarios
-
-**Scenario 5: Enterprise Integration**
-- Complex nested resource hierarchies
-- Business entity relationships
-- Multi-level authorization patterns
-- Comprehensive API documentation needs
+### Test Scenarios Covering Enterprise Requirements
+- **Legacy Enterprise Application**: Mixed annotations, complex domain models, multi-module Maven projects
+- **Microservices Architecture**: Contract-first development, generated stubs, separate modules
+- **Code Generation Workflows**: OpenAPI specification → Java code generation, missing interface source code
+- **Migration Projects**: Gradual migration, mixed annotation styles, backward compatibility
+- **Enterprise Integration**: Complex nested hierarchies, business entity relationships
 
 ### Test Execution and Quality Assurance
 - **Maven Integration**: Tests run as part of build process (`mvn test`)
 - **Java 17 Compatibility**: Modern language features with text blocks
-- **Flexible Assertions**: Robust test expectations that accommodate inference variations
 - **Performance Testing**: Large project scanning (spring-petclinic-rest: 35 endpoints)
 - **Error Handling**: Malformed code, missing dependencies, parsing failures
 - **Output Validation**: Generated OpenAPI specifications, CLI reports
 
-### Continuous Quality Metrics
-- **Code Coverage**: Core parsing, framework detection, endpoint extraction
-- **Real-world Validation**: Tested against production Spring projects
-- **Regression Testing**: Ensures existing functionality remains intact
-- **Edge Case Handling**: Unusual method names, complex generics, annotation variations
-
 ## Enhanced User Experience
 
 ### Professional CLI Output Formatting
-The APISCAN tool now features enterprise-grade console output with improved readability and professional presentation:
+Enterprise-grade console output with improved readability and professional presentation:
 
 #### Key Improvements
 1. **Professional Header Design**: Clean ASCII formatting and clear branding (Windows-compatible)
-   ```
-   =========================================================
-   |                   APISCAN v1.0.0                     |
-   |            Enterprise API Endpoint Scanner           |
-   =========================================================
-   ```
-
 2. **Clean Progress Indicators**: Clear status messages without verbose debug output
-   - Framework detection confirmation
-   - Scan progress with timing information
-   - Endpoint discovery count
-   - OpenAPI generation status
-
-3. **Structured Summary Reports**: Professionally formatted scan results
-   - **Project Information**: Clean project name extraction and framework details
-   - **Performance Metrics**: File scan counts and duration with proper number formatting
-   - **HTTP Method Breakdown**: Tabulated endpoint counts by method with icons
-   - **Controller Organization**: Sorted by endpoint count, easy to identify high-traffic controllers
-   - **Detailed Endpoint Listing**: Organized by controller with hierarchical display
-
-4. **Enhanced Data Visualization**:
-   - **HTTP Method Indicators**: [GET], [POST], [PUT], [DEL], [PATCH]
-   - **ASCII-Safe Formatting**: Cross-platform compatible console output
-   - **Parameter Display**: Compact parameter information without clutter
-   - **Deprecation Indicators**: Clear [DEPRECATED] marking of deprecated endpoints
-
-5. **Reduced Debug Noise**: 
-   - **Production Logging**: Debug information sent to log files, not console
-   - **Clean Console Output**: Only essential information displayed to users
-   - **Verbose Mode Available**: Full details accessible with `-v` flag when needed
-
-#### Example Professional Output
-```
-[INFO] Framework detected: Spring
-[INFO] Scanning for API endpoints...
-[SUCCESS] Scan completed in 1,266ms
-[RESULT] Found 35 API endpoints
-
-=========================================================
-|                    SCAN SUMMARY                      |
-=========================================================
-Project:          spring-petclinic-rest
-Framework:        Spring  
-Files scanned:    83
-Duration:         1,266 ms
-Total endpoints:  35
-
-HTTP Methods:
------------------------------------------
-  [DEL] DELETE   6 endpoints
-  [GET] GET      14 endpoints
-  [POST] POST     8 endpoints
-  [PUT] PUT      7 endpoints
-
-Controllers:
------------------------------------------
-  [ 9] OwnerRestController
-  [ 5] SpecialtyRestController
-  [ 5] VetRestController
-  [ 5] PetTypeRestController
-  [ 5] VisitRestController
-  [ 4] PetRestController
-  [ 1] UserRestController
-  [ 1] RootRestController
-
-=========================================================
-|             SCAN COMPLETED SUCCESSFULLY!             |
-=========================================================
-```
-
-### Output Format Testing
-Comprehensive test coverage for the enhanced output formatting:
-- **ReportGeneratorTest**: Complete test suite validating all formatting improvements
-- **ASCII-Safe Presentation**: Verification of cross-platform compatible formatting
-- **Content Organization**: Testing of tabular layouts and hierarchical displays  
-- **Edge Case Handling**: Long controller names, empty results, error scenarios
-- **Console Output Capture**: Systematic validation of all output sections
+3. **Structured Summary Reports**: Professionally formatted scan results with project information, performance metrics, HTTP method breakdown, controller organization, and detailed endpoint listing
+4. **Enhanced Data Visualization**: HTTP method indicators [GET], [POST], [PUT], [DEL], [PATCH] with ASCII-safe formatting
+5. **Reduced Debug Noise**: Production logging with clean console output and verbose mode available
 
 ### Cross-Platform Compatibility
-The enhanced output formatting addresses common Windows console encoding issues:
 - **ASCII-Safe Characters**: Replaced Unicode box-drawing and emoji with standard ASCII
 - **Windows Console Support**: Fully compatible with Windows Command Prompt and PowerShell
 - **Universal Display**: Consistent appearance across Windows, macOS, and Linux terminals
-- **Character Encoding Independent**: No dependency on UTF-8 console support
-- **Professional Appearance**: Maintains enterprise-grade visual quality with standard characters
-
-### User Experience Benefits
-1. **Professional Appearance**: Enterprise-grade console output suitable for business presentations
-2. **Information Density**: Maximum useful information in minimal screen space
-3. **Quick Scanning**: Easy to identify key metrics and problem areas at a glance
-4. **Consistent Formatting**: Standardized presentation across all scan results
-5. **Reduced Cognitive Load**: Clean, organized information hierarchy
-6. **Tool Credibility**: Professional appearance enhances user trust and adoption
 
 ## OpenAPI File Generation
 
-### Core Functionality Alignment
-APISCAN now properly fulfills its primary goal from the Core Requirements - **creating OpenAPI files by default**:
-
-#### Default Behavior (Fixed)
+### Default Behavior
 - **Automatic Generation**: OpenAPI files are **always generated** when scanning a project
 - **Smart File Naming**: Auto-generates filename as `{project-name}-openapi.{format}` in current directory
 - **Format Support**: YAML (default) and JSON formats available with `-f/--format` flag
 - **User-Friendly**: No need to remember `-o/--output` parameter for basic usage
-
-#### File Location
-- **Default Location**: Generated in the current working directory (where you run APISCAN)
-- **Custom Location**: Use `-o/--output` to specify alternative file path
-- **Clear Feedback**: Tool shows full path of generated OpenAPI file
 
 #### Example Usage
 ```bash
@@ -294,262 +127,65 @@ java -jar apiscan-cli.jar -f json "C:\path\to\spring-petclinic-rest"
 java -jar apiscan-cli.jar -o my-api-spec.yaml "C:\path\to\spring-petclinic-rest"
 ```
 
-#### Sample Output
-```
-[SUCCESS] OpenAPI specification saved: C:\current\directory\spring-petclinic-rest-openapi.yaml
-```
-
-This ensures APISCAN delivers on its **core promise** of generating OpenAPI documentation files, making it immediately useful for enterprise API documentation workflows.
-
 ## DTO Schema Resolution and Generation
 
 ### Advanced DTO Support for Enterprise APIs
-
-APISCAN now includes sophisticated DTO (Data Transfer Object) schema resolution and generation, addressing a critical enterprise requirement: **handling generated code and complex data structures** in OpenAPI specifications.
+APISCAN includes sophisticated DTO (Data Transfer Object) schema resolution and generation, addressing a critical enterprise requirement: **handling generated code and complex data structures** in OpenAPI specifications.
 
 #### Core DTO Functionality
-
-**Intelligent DTO Discovery**: APISCAN automatically searches for DTO classes in common locations:
-- `target/generated-sources/openapi/src/main/java` (Generated OpenAPI DTOs)
-- `build/generated-sources/openapi/src/main/java` (Gradle generated DTOs)
-- `src/main/java` (Manual/custom DTOs)
-- Additional annotation processor locations
-
-**AST-Based Schema Parsing**: Using JavaParser, APISCAN analyzes DTO source code to extract:
-- Field names and types (String, Integer, List<>, etc.)
-- Validation constraints (`@NotNull`, `@Size`, etc.)
-- Documentation from JavaDoc and annotations (`@Schema`)
-- Collection types and nested object structures
-
-**OpenAPI 3.0.3 Compliant Output**: Generated schemas follow OpenAPI best practices:
-- Proper `$ref` references to components/schemas
-- Detailed field type mapping (Java → OpenAPI types)
-- Required field detection from validation annotations
-- Array and nested object support
+- **Intelligent DTO Discovery**: Automatically searches for DTO classes in common locations (generated sources, build directories, source directories)
+- **AST-Based Schema Parsing**: Analyzes DTO source code to extract field names, types, validation constraints, documentation, and collection types
+- **OpenAPI 3.0.3 Compliant Output**: Generated schemas follow OpenAPI best practices with proper `$ref` references and detailed field type mapping
 
 #### Enterprise DTO Patterns Supported
-
 1. **Generated OpenAPI DTOs**: Complete support for Spring Boot OpenAPI code generation
-   ```java
-   @Schema(name = "Owner", description = "A pet owner.")
-   public class OwnerDto {
-       @NotNull @Size(min = 1, max = 30)
-       private String firstName;
-       // ... other fields
-   }
-   ```
-
 2. **Dual DTO Pattern**: Handles read/write model separation common in enterprise APIs
-   - `OwnerDto` - Full representation (includes ID, read-only fields)
-   - `OwnerFieldsDto` - Write operations (editable fields only)
+3. **Missing DTO Graceful Handling**: When DTO source is unavailable, provides placeholder schemas
+4. **Complex Nested Structures**: Supports enterprise entity relationships with collections and nested objects
 
-3. **Missing DTO Graceful Handling**: When DTO source is unavailable (e.g., not built yet):
-   ```yaml
-   components:
-     schemas:
-       MissingDto:
-         type: object
-         description: "DTO class 'MissingDto' - Schema not available (generated source may be missing)"
-         properties:
-           _schemaPlaceholder:
-             type: string
-             description: "This DTO schema is not available. The class 'MissingDto' may be generated code that needs to be built first."
-   ```
+### Multi-Module DTO Resolution
+Enhanced support for enterprise Maven projects where model classes and API controllers are separated into different modules.
 
-4. **Complex Nested Structures**: Supports enterprise entity relationships:
-   - Collections: `List<PetDto>` → array with DTO item references
-   - Nested objects: `PetTypeDto` → proper schema reference
-   - Generic type extraction and mapping
-
-#### OpenAPI Schema Generation Examples
-
-**Before DTO Support**:
-```yaml
-post:
-  responses:
-    "200":
-      content:
-        application/json:
-          schema:
-            type: object
-            description: "Response of type: OwnerDto"
-```
-
-**After DTO Support**:
-```yaml
-post:
-  responses:
-    "200":
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/OwnerDto'
-
-components:
-  schemas:
-    OwnerDto:
-      type: object
-      description: "A pet owner."
-      properties:
-        firstName:
-          type: string
-        lastName:
-          type: string
-        address:
-          type: string
-        city:
-          type: string
-        telephone:
-          type: string
-        id:
-          type: integer
-        pets:
-          type: array
-          items:
-            type: object
-            description: "Object of type: PetDto"
-      required:
-        - firstName
-        - lastName
-        - address
-        - city
-        - telephone
-```
-
-#### Enterprise Impact and Benefits
-
-**For API Documentation Teams**:
-- **Rich Schema Information**: Complete field descriptions, types, and constraints
-- **Professional Output**: OpenAPI specifications that work seamlessly with tools like Swagger UI, Postman, and code generators
-- **No Manual Schema Maintenance**: DTOs automatically discovered and parsed
-
-**For Enterprise Development**:
-- **Generated Code Support**: Works with popular OpenAPI generators (Spring Boot, Quarkus)
-- **Build Process Integration**: Handles DTOs that exist only after compilation
-- **Contract-First Development**: Supports interface-based API development patterns
-
-**For Microservices Architecture**:
-- **Schema Consistency**: Ensures DTO schemas match actual code structure
-- **Cross-Service Documentation**: Provides complete data model documentation for API consumers
-- **Development Workflow Integration**: Works whether DTOs are generated or manually created
-
-#### Technical Implementation
-
-**DtoSchemaResolver Class**: Core component for DTO discovery and schema generation
-- **Caching System**: Avoids re-parsing the same DTO multiple times
-- **Search Path Prioritization**: Prefers generated sources over manual sources
-- **Error Recovery**: Graceful fallback to placeholder schemas
-
-**SwaggerCoreOpenApiGenerator Integration**: Enhanced OpenAPI generator
-- **Schema References**: Proper `$ref` usage instead of inline schemas
-- **Components Section**: Centralized schema definitions
-- **Type System**: Complete Java to OpenAPI type mapping
+#### Solution Implemented
+- **Multi-Module Search Strategy**: Enhanced `DtoSchemaResolver` to search across Maven project structures
+- **Smart Module Recognition**: Uses heuristics to identify potential Maven modules (presence of `pom.xml`, standard Maven directory structure, module naming patterns)
+- **Cross-Module Discovery**: Automatically finds DTOs regardless of module boundaries
 
 #### Real-World Results
-
-**spring-petclinic-rest Project**:
-- **Before**: Generic object descriptions without field details
-- **After**: Complete DTO schemas with 7+ detailed data models
-- **Generated Schemas**: OwnerDto, PetDto, VetDto, VisitDto, SpecialtyDto, PetTypeDto, UserDto
-- **Professional Output**: Enterprise-grade OpenAPI specification suitable for production documentation
-
-This DTO support transforms APISCAN from a basic endpoint scanner into a comprehensive API documentation tool that handles the complexity of modern enterprise Java applications with generated code, validation frameworks, and sophisticated data models.
+- **Shopizer E-commerce Platform**: 324 endpoints with complete DTO schema resolution
+- **Schema Quality**: Rich object definitions with field types, arrays, and nested structures
 
 ### Recursive DTO Reference Resolution
+Sophisticated recursive reference resolution ensures all DTO schemas referenced in the OpenAPI specification are properly included in the `components.schemas` section, preventing broken `$ref` links and validation errors.
 
-APISCAN includes sophisticated recursive reference resolution to ensure that all DTO schemas referenced in the OpenAPI specification are properly included in the `components.schemas` section.
+## Enterprise OpenAPI Validation & Compliance
 
-#### Problem Solved
-The initial implementation could generate broken OpenAPI specifications where nested DTO references (e.g., `UserDto.roles` referencing `RoleDto`) would create `$ref` links to schemas that weren't included in the components section, causing validation errors:
+APISCAN includes comprehensive OpenAPI 3.0.3 specification compliance and validation fixes to ensure generated specifications pass semantic validation in enterprise tools and workflows.
 
-```
-Semantic error at components.schemas.UserDto.properties.roles.items.$ref
-$refs must reference a valid location in the document
-```
+### Critical OpenAPI Validation Issues Resolved
+1. **Complex Path Parameter Extraction**: Enhanced path parameter extraction logic using regex patterns
+2. **Schema Component Name Sanitization**: Implemented comprehensive schema name sanitization for invalid characters
+3. **Unique OperationId Generation**: Implemented intelligent uniqueness detection with fallback strategies
+4. **HTTP Method Request Body Validation**: Added method validation to prevent invalid request body inclusion
+5. **Multiple Path Pattern Support**: Handles Spring annotations with multiple paths correctly
 
-#### Solution Implementation
-**Recursive Schema Resolution**: Enhanced the `SwaggerCoreOpenApiGenerator` with a `resolveNestedDtoReferences` method that:
+### Real-World Validation Results
+**Shopizer E-commerce Platform (306 endpoints)**:
+- **Before Fixes**: 68+ semantic validation errors
+- **After Fixes**: ✅ Zero semantic validation errors, all endpoints pass validation
 
-1. **Analyzes All DTO Properties**: Scans through each resolved DTO schema to identify nested `$ref` references
-2. **Resolves Referenced DTOs**: Automatically resolves and includes any DTOs referenced by `$ref` paths
-3. **Handles Array Items**: Processes array item schemas that reference DTOs (e.g., `List<RoleDto>`)
-4. **Prevents Infinite Loops**: Uses the existing `dtoSchemas` cache to avoid circular reference issues
-5. **Recursive Processing**: Applies the same analysis to newly resolved DTOs to catch multi-level references
-
-#### Technical Implementation Details
-
-**Enhanced `buildSchemaForType` Method**:
-```java
-// Resolve DTO schema
-Schema<?> resolvedSchema = schemaResolver.resolveSchema(className);
-if (resolvedSchema != null) {
-    dtoSchemas.put(className, resolvedSchema);
-    
-    // Recursively resolve any nested DTO references in the resolved schema
-    resolveNestedDtoReferences(resolvedSchema, schemaResolver, dtoSchemas);
-    
-    // Return reference to the schema in components
-    Schema<Object> refSchema = new Schema<>();
-    refSchema.$ref("#/components/schemas/" + className);
-    return refSchema;
-}
-```
-
-**New `resolveNestedDtoReferences` Method**: Comprehensive recursive resolution that handles:
-- Direct DTO property references (`$ref: '#/components/schemas/RoleDto'`)
-- Array item references (`List<RoleDto>` → items with `$ref`)
-- Nested object properties with further DTO references
-- Multi-level reference chains (DTO → DTO → DTO)
-
-#### Real-World Impact
-
-**Before Fix**:
-- Generated OpenAPI files with broken `$ref` links
-- Semantic validation errors when opening specifications
-- Incomplete schema information for API consumers
-- Manual intervention required to fix reference issues
-
-**After Fix**:
-- All referenced DTOs automatically included in `components.schemas`
-- Valid OpenAPI 3.0.3 specifications that pass validation
-- Complete schema information for nested object structures
-- Seamless integration with tools like Swagger UI, Postman, and code generators
-
-#### Example Result
-
-**spring-petclinic-rest Project**: The `UserDto.roles` field now properly references `RoleDto`, and the generated specification includes:
-
-```yaml
-components:
-  schemas:
-    UserDto:
-      type: object
-      properties:
-        roles:
-          type: array
-          items:
-            $ref: '#/components/schemas/RoleDto'
-    RoleDto:
-      type: object
-      properties:
-        name:
-          type: string
-```
-
-#### Test Coverage
-Added comprehensive test `shouldHandleBrokenSchemaReferences()` in `DtoSchemaResolverTest` to validate:
-- Graceful handling of missing DTO references
-- Proper fallback to placeholder schemas when resolution fails
-- Prevention of broken `$ref` generation in edge cases
-
-This enhancement ensures that APISCAN generates production-ready OpenAPI specifications with complete schema definitions, meeting enterprise quality standards for API documentation workflows.
+### Technical Implementation
+**Key Components Enhanced**:
+- `SwaggerCoreOpenApiGenerator`: Main compliance and validation logic
+- `extractPathParameterNames()`: Regex-based complex path parameter extraction
+- `sanitizeSchemaName()`: Comprehensive schema name normalization
+- `ensureUniqueOperationId()`: Multi-strategy uniqueness enforcement
+- `supportsRequestBody()`: HTTP method validation for request bodies
 
 ## Comprehensive HTTP Response Code Generation
 
 ### Enterprise-Grade Response Standards
-APISCAN now generates comprehensive HTTP response codes that match enterprise API documentation standards, significantly enhancing the quality and completeness of generated OpenAPI specifications.
-
-#### Key Response Code Features
+APISCAN generates comprehensive HTTP response codes that match enterprise API documentation standards:
 
 **Complete HTTP Status Code Coverage**:
 - **200 OK**: Success responses with appropriate content types and schemas
@@ -560,672 +196,274 @@ APISCAN now generates comprehensive HTTP response codes that match enterprise AP
 - **500 Internal Server Error**: For server errors with error schema
 
 **Smart Response Generation Logic**:
-- **Method-Specific Responses**: Different response codes based on HTTP method (GET vs POST vs PUT vs DELETE)
-- **Resource-Aware Error Messages**: "owner not found", "pet not found" instead of generic errors
-- **Conditional 304 Support**: Only added for cacheable operations (GET, PUT, PATCH)
-- **Path Parameter Detection**: 404 responses only added for endpoints with path parameters
-
-#### Enterprise API Pattern Support
-
-**Before Enhancement**:
-```yaml
-responses:
-  "200":
-    description: Successful response
-    content:
-      application/json:
-        schema:
-          $ref: '#/components/schemas/OwnerDto'
-```
-
-**After Enhancement**:
-```yaml
-responses:
-  "200":
-    description: owner details found and returned.
-    content:
-      application/json:
-        schema:
-          $ref: '#/components/schemas/OwnerDto'
-  "304":
-    description: Not modified.
-    content:
-      application/json:
-        schema:
-          $ref: '#/components/schemas/OwnerDto'
-  "400":
-    description: Bad request.
-    content:
-      application/json:
-        schema:
-          $ref: '#/components/schemas/ProblemDetail'
-  "404":
-    description: owner not found.
-    content:
-      application/json:
-        schema:
-          $ref: '#/components/schemas/ProblemDetail'
-  "500":
-    description: Server error.
-    content:
-      application/json:
-        schema:
-          $ref: '#/components/schemas/ProblemDetail'
-```
-
-#### Error Schema Integration
-
-**ProblemDetail Support**: 
-- Automatic `ProblemDetail` schema references for error responses
-- Graceful fallback to generic error schema when ProblemDetail is not available
-- Consistent error structure across all API endpoints
-
-**Example Error Schema**:
-```yaml
-ProblemDetail:
-  type: object
-  properties:
-    title:
-      type: string
-      description: Error title
-    detail:
-      type: string  
-      description: Error detail
-    status:
-      type: integer
-      description: HTTP status code
-```
-
-#### Response Content Optimization
-
-**Content Type Consistency**: All responses include proper `application/json` content types
-**Schema Reuse**: 304 responses reuse existing success response content for efficiency
-**Content Inheritance**: Error responses follow consistent schema patterns
-
-#### Real-World Impact
-
-**spring-petclinic-rest Results**:
-- **Before**: Basic 200 response only
-- **After**: Complete enterprise response coverage (200, 304, 400, 404, 500)
-- **35 Endpoints Enhanced**: All endpoints now include comprehensive response documentation
-- **Error Handling**: Professional error response patterns throughout
-
-**Enterprise Benefits**:
-- **API Client Generation**: Better client library generation with proper error handling
-- **Documentation Quality**: Professional-grade API documentation matching industry standards
-- **Developer Experience**: Clear expectations for all possible API responses
-- **Testing Support**: Complete response coverage for automated testing scenarios
-- **Production Readiness**: Enterprise-grade error handling documentation
-
-This enhancement brings APISCAN's OpenAPI generation to enterprise standards, providing comprehensive response documentation that matches the quality of manually crafted API specifications while maintaining the automation and consistency benefits of code-first documentation generation.
+- Method-specific responses based on HTTP method
+- Resource-aware error messages
+- Conditional 304 support for cacheable operations
+- Path parameter detection for 404 responses
 
 ## Enhanced Nested Object Schema Resolution
 
 ### Enterprise-Grade DTO Reference Generation
-APISCAN now generates proper schema references for nested DTO objects, eliminating empty object schemas and providing accurate example values in OpenAPI specifications.
-
-#### Problem Solved
-Previously, nested DTO fields were generating generic object descriptions instead of proper schema references:
-
-**Before Enhancement**:
-```yaml
-PetFieldsDto:
-  type: object
-  properties:
-    name:
-      type: string
-    type:
-      type: object
-      description: "Object of type: PetTypeDto"  # Empty object!
-    birthDate:
-      type: string
-      format: date-time
-```
-
-This resulted in example values like:
-```json
-{
-  "name": "string",
-  "type": {},  // Empty object - not helpful!
-  "birthDate": "2025-08-18T02:42:59.493Z"
-}
-```
+APISCAN generates proper schema references for nested DTO objects, eliminating empty object schemas and providing accurate example values in OpenAPI specifications.
 
 #### Solution Implementation
-
-**Enhanced DTO Schema Resolver**: Implemented intelligent nested object detection and reference generation:
-
-1. **DTO Class Detection**: Identifies classes that should be referenced based on naming patterns
-   - Classes ending with `Dto`, `DTO`, `Response`, `Request`, `Entity`, `Model`
-   - Classes already resolved in the schema cache
-
-2. **Proper Reference Generation**: Creates `$ref` schema references instead of empty objects
-3. **Collection Support**: Handles nested DTOs within collections (`List<PetDto>`, `Set<SpecialtyDto>`)
-4. **Fallback Strategy**: Gracefully handles unavailable DTOs with descriptive object schemas
-
-**After Enhancement**:
-```yaml
-PetFieldsDto:
-  type: object
-  properties:
-    name:
-      type: string
-    type:
-      $ref: '#/components/schemas/PetTypeDto'  # Proper reference!
-    birthDate:
-      type: string
-      format: date-time
-```
-
-This generates accurate example values:
-```json
-{
-  "name": "string",
-  "type": {
-    "name": "string",
-    "id": 0
-  },
-  "birthDate": "2025-08-18T02:42:59.493Z"
-}
-```
-
-#### Technical Implementation
-
-**buildFieldSchema Method**: Core logic for handling nested object resolution:
-```java
-private Schema<Object> buildFieldSchema(String fieldType) {
-    if (isPrimitiveType(fieldType)) {
-        setSchemaType(fieldSchema, fieldType);
-    } else if (isCollectionType(fieldType)) {
-        // Handle arrays with proper item references
-        fieldSchema.type("array");
-        String itemType = extractGenericType(fieldType);
-        Schema<Object> itemSchema = buildFieldSchema(itemType);
-        fieldSchema.items(itemSchema);
-    } else {
-        // Create proper DTO references
-        String simpleClassName = extractSimpleClassName(fieldType);
-        if (isDtoClass(simpleClassName)) {
-            fieldSchema.$ref("#/components/schemas/" + simpleClassName);
-        } else {
-            // Fallback for non-DTO objects
-            fieldSchema.type("object");
-            fieldSchema.description("Object of type: " + fieldType);
-        }
-    }
-}
-```
-
-**Smart DTO Detection**: Recognizes enterprise DTO patterns:
-```java
-private boolean isDtoClass(String className) {
-    return className.endsWith("Dto") || 
-           className.endsWith("DTO") || 
-           className.endsWith("Response") || 
-           className.endsWith("Request") || 
-           className.endsWith("Entity") ||
-           className.endsWith("Model") ||
-           schemaCache.containsKey(className);
-}
-```
-
-#### Real-World Impact
-
-**spring-petclinic-rest Results**:
-- **Before**: Empty object schemas (`"type": {}`) in DTO examples
-- **After**: Proper schema references with complete nested object definitions
-- **Enhanced DTOs**: PetFieldsDto, OwnerDto, VetDto, UserDto, and more
-
-**Example Improvements**:
-- `PetFieldsDto.type` → `$ref: '#/components/schemas/PetTypeDto'`
-- `OwnerDto.pets` → `$ref: '#/components/schemas/PetDto'` (array items)
-- `UserDto.roles` → `$ref: '#/components/schemas/RoleDto'` (array items)
-- `VetDto.specialties` → `$ref: '#/components/schemas/SpecialtyDto'` (array items)
-
-#### Enterprise Benefits
-
-**API Documentation Quality**:
-- **Accurate Examples**: Proper nested object examples in OpenAPI viewers
-- **Schema Validation**: Full validation support for nested structures
-- **Type Safety**: Complete type information for code generation tools
-
-**Developer Experience**:
-- **IntelliSense Support**: Better IDE autocomplete for nested objects
-- **API Client Generation**: Accurate client libraries with proper nested types
-- **Testing**: Realistic test data generation from schema examples
-
-**Tooling Integration**:
-- **Swagger UI**: Displays complete nested object schemas with expandable sections
-- **Postman**: Generates accurate request examples with nested object structures
-- **Code Generators**: Creates proper DTOs with nested object relationships
-
-#### Test Coverage
-
-**Comprehensive Nested Object Testing**:
-- `shouldCreateProperReferencesForNestedDtos()`: Validates proper `$ref` generation
-- Collection handling tests for `List<DTO>` scenarios
-- Fallback behavior for unavailable DTOs
-- Cache integration testing for resolved schemas
-
-This enhancement transforms DTO schema generation from basic object descriptions to enterprise-grade schema references, providing the detailed object structure information essential for professional API documentation and tooling integration.
+- **Enhanced DTO Schema Resolver**: Intelligent nested object detection and reference generation
+- **DTO Class Detection**: Identifies classes based on naming patterns (Dto, DTO, Response, Request, Entity, Model)
+- **Proper Reference Generation**: Creates `$ref` schema references instead of empty objects
+- **Collection Support**: Handles nested DTOs within collections
 
 ## OpenAPI Validation & Standards Compliance
 
 ### Critical Learning: Exact Parameter Name Matching Required
+APISCAN uses **Swagger Core library** instead of custom OpenAPI generation to ensure full OpenAPI 3.0.3 specification compliance.
 
-APISCAN now uses **Swagger Core library** instead of custom OpenAPI generation to ensure full OpenAPI 3.0.3 specification compliance. A critical lesson learned during development:
+**OpenAPI Validation Rules**: Path parameters must have exact name matching between URL segments and parameter definitions.
 
-#### OpenAPI Validation Rules
-**Path parameters must have exact name matching between URL segments and parameter definitions.**
-
-#### Example Issue Fixed:
-- **Path**: `/api/vet/{id}`
-- **Wrong**: Parameter name `vetId` ❌ 
-- **Correct**: Parameter name `id` ✅
-
-#### Root Cause Analysis:
-Initial implementation attempted "smart" parameter matching (e.g., matching `vetId` parameter to `{id}` path segment). However, OpenAPI specification requires exact matching for validation tools and code generators to work correctly.
-
-#### Solution Implemented:
+#### Solution Implemented
 1. **Extract Path Parameter Names**: Parse URL paths to identify all `{paramName}` segments
 2. **Exact Matching**: Only treat parameters as path parameters if names match exactly
 3. **Auto-Generate Missing Parameters**: Create path parameters for unmatched path segments
 4. **Swagger Core Library**: Use industry-standard library instead of custom implementation
 
-#### Validation Errors Resolved:
-```yaml
-# Before (Invalid):
-paths:
-  /api/vet/{id}:
-    put:
-      parameters:
-      - name: vetId        # ❌ Does not match {id} in path
-        in: path
-        
-# After (Valid):
-paths:  
-  /api/vet/{id}:
-    put:
-      parameters:
-      - name: id           # ✅ Exact match with {id} in path
-        in: path
-```
-
-#### Enterprise Impact:
-- **OpenAPI Viewers**: Specifications now display correctly in Swagger UI, ReDoc, Postman
-- **Code Generation**: Tools can generate accurate client libraries and server stubs  
-- **API Documentation**: No validation errors in enterprise documentation workflows
-- **CI/CD Integration**: Specifications pass automated validation in build pipelines
-
-#### Test Coverage:
-Comprehensive test suite added covering:
-- Exact parameter name matching scenarios
-- Missing path parameter detection and auto-generation
-- OpenAPI 3.0.3 compliance validation 
-- Real-world Spring project patterns (spring-petclinic-rest: 35 endpoints tested)
-
-This fix ensures APISCAN generates production-ready OpenAPI specifications that meet enterprise quality standards.
-
 ## Request Body Detection for Inferred Endpoints
 
 ### Enhanced DTO Parameter Recognition
+APISCAN properly detects and includes request body parameters when inferring endpoints from @Override methods, addressing a critical gap in OpenAPI generation for interface-based controllers.
 
-APISCAN now properly detects and includes request body parameters when inferring endpoints from @Override methods, addressing a critical gap in OpenAPI generation for interface-based controllers.
-
-#### The Problem
-When controllers implement interfaces (common in generated code or contract-first development), the @Override methods often lack @RequestBody annotations. This resulted in missing request body definitions in the generated OpenAPI specification, even though the methods clearly accept DTO parameters.
-
-#### The Solution  
+#### The Solution
 Enhanced the SpringFrameworkScanner to intelligently identify DTO parameters as request bodies for POST/PUT/PATCH methods:
-
-1. **Smart DTO Detection**: Recognizes common DTO patterns without requiring @RequestBody annotation:
-   - Types ending with: Dto, DTO, Request, Response, Model, Form, Input, Output, Payload
-   - Complex types that are not simple Java types (String, Integer, etc.)
-   - Excludes parameters with @PathVariable, @RequestParam, or @RequestHeader annotations
-
-2. **HTTP Method Awareness**: Only treats DTO parameters as request bodies for modifying operations:
-   - POST methods: Create operations expecting request bodies
-   - PUT methods: Update operations with full replacement
-   - PATCH methods: Partial update operations
-   - GET/DELETE methods: No automatic request body inference
-
+1. **Smart DTO Detection**: Recognizes common DTO patterns without requiring @RequestBody annotation
+2. **HTTP Method Awareness**: Only treats DTO parameters as request bodies for modifying operations
 3. **Backward Compatibility**: Continues to respect explicit @RequestBody annotations when present
-
-#### Real-World Impact
-
-**spring-petclinic-rest Project Results**:
-- **Before Fix**: POST /api/owners had no request body defined
-- **After Fix**: POST /api/owners correctly includes OwnerFieldsDto request body
-- **All Endpoints Fixed**: 15+ POST/PUT endpoints now have proper request body schemas
-
-**Example OpenAPI Output**:
-```yaml
-/api/owners:
-  post:
-    operationId: OwnerRestController_addOwner
-    requestBody:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/OwnerFieldsDto'
-      required: true
-    responses:
-      "200":
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OwnerDto'
-```
-
-#### Technical Implementation
-
-The fix involves two key changes in SpringFrameworkScanner:
-
-1. **Enhanced extractRequestBody Method**: 
-   - Checks HTTP method to determine if request body is expected
-   - Identifies DTO parameters based on naming patterns and type complexity
-   - Automatically creates request body definitions for qualifying parameters
-
-2. **Improved extractParameter Method**:
-   - Skips DTO parameters that will be handled as request bodies
-   - Prevents duplicate parameter definitions in OpenAPI
-
-#### Test Coverage
-Added comprehensive test `testRequestBodyDetectionInInferredEndpoints` that verifies:
-- POST endpoints have request bodies for DTO parameters
-- PUT endpoints have request bodies for DTO parameters  
-- GET endpoints do not have request bodies added
-- Request body schemas correctly reference DTO types
-
-This enhancement ensures that APISCAN generates complete and accurate OpenAPI specifications for all Spring REST APIs, regardless of whether they use direct annotations or interface-based implementations.
 
 ## Professional Report Formatting with Aligned Indentation
 
 ### Enhanced Console Output Readability
-
-APISCAN's report formatting has been significantly improved to provide professional, well-aligned output that enhances readability and maintains consistent indentation throughout the entire report.
-
-#### The Problem
-The initial report formatting had inconsistent indentation where:
-- Parameter lines were not properly aligned with endpoint details
-- HTTP method columns had varying widths
-- Controller names could overflow their display area
-- Sub-items (parameters, request bodies) lacked visual hierarchy
+APISCAN's report formatting provides professional, well-aligned output with consistent indentation throughout the entire report.
 
 #### The Solution
-Comprehensive formatting improvements across the ReportGenerator:
+1. **Consistent Column Widths**: Fixed-width formatting for HTTP methods, API paths, and method icons
+2. **Professional Indentation**: Clear visual hierarchy between endpoints and their details
+3. **Smart Truncation**: Handles long paths, parameter lists, and controller names gracefully
+4. **Enhanced Visual Separators**: Section headers and consistent spacing
 
-1. **Consistent Column Widths**: 
-   - HTTP methods: Fixed 6-character width (`%-6s`)
-   - API paths: Fixed 40-character width with truncation (`%-40s`)
-   - Method icons: Standardized format (`[GET]`, `[POST]`, etc.)
-
-2. **Professional Indentation**:
-   - Main endpoint lines: 2-space indent
-   - Parameters line: 15-space indent for perfect alignment
-   - Request Body line: 15-space indent matching parameters
-   - Creates clear visual hierarchy between endpoints and their details
-
-3. **Smart Truncation**:
-   - Long paths truncated at 40 characters with "..."
-   - Long parameter lists truncated at 45 characters
-   - Controller names handled gracefully at 35 characters
-
-4. **Enhanced Visual Separators**:
-   - Section headers use 70-character separators
-   - Consistent use of dashed lines for subsections
-   - Proper spacing between different report sections
-
-#### Example Professional Output
-
-**Before (Misaligned)**:
-```
-  [POST] POST    /api/owners                         addOwner
-     Parameters: ownerId
-  [GET] GET     /api/owners/{ownerId}               getOwner
-     Parameters: ownerId
-```
-
-**After (Professional Alignment)**:
-```
-  [POST] POST   /api/owners                             addOwner
-               Request Body: OwnerFieldsDto
-  [GET] GET    /api/owners/{ownerId}                   getOwner
-               Parameters: ownerId
-  [PUT] PUT    /api/owners/{ownerId}                   updateOwner
-               Parameters: ownerId
-               Request Body: OwnerFieldsDto
-```
-
-#### Technical Implementation
-
-**ReportGenerator Enhancements**:
-- Fixed-width formatting using `String.format()` for consistent columns
-- Proper 15-space indentation for sub-items (parameters, request bodies)
-- Intelligent truncation helper method for handling long strings
-- Separation of concerns between data formatting and display logic
-
-**Key Changes**:
-```java
-// Professional column alignment
-String method = String.format("%-6s", endpoint.getHttpMethod());
-String path = String.format("%-40s", truncate(endpoint.getPath(), 40));
-
-// Consistent sub-item indentation (15 spaces)
-System.out.printf("               Parameters: %s%n", params);
-System.out.printf("               Request Body: %s%n", bodyType);
-```
-
-#### Test Coverage
-Added `testProfessionalIndentationFormatting` test that verifies:
-- Parameters line has exactly 15-space indentation
-- Request Body line has exactly 15-space indentation
-- HTTP method icons are consistently formatted
-- Long names are properly truncated
-
-#### User Benefits
-
-1. **Professional Presentation**: Report output suitable for documentation and presentations
-2. **Improved Readability**: Clear visual hierarchy makes information easy to scan
-3. **Consistent Experience**: Same formatting quality regardless of data variations
-4. **Enterprise Quality**: Output meets professional standards expected in corporate environments
-5. **Better Information Density**: More information visible without scrolling
-
-This formatting enhancement ensures APISCAN produces professional, enterprise-grade reports that are both informative and visually appealing.
-
-## Perfect Vertical URL Alignment Fix
-
-### Resolved Critical Alignment Issue
-
-Fixed the vertical alignment problem where endpoint URLs were not perfectly aligned due to inconsistent HTTP method icon widths, creating a professional, properly aligned output.
-
-#### The Problem
-URLs were misaligned because:
-- Different HTTP method names have varying lengths (`GET` vs `POST` vs `DELETE`)  
-- Method icons had inconsistent widths (`[GET]` = 5 chars, `[POST]` = 6 chars, `[DEL]` = 5 chars)
-- This caused URLs to appear jagged and unprofessional in the output
-
-#### The Solution
-1. **Fixed Method Icon Width**: Used consistent 8-character width (`%-8s`) for all method icons
-2. **Removed Redundant Method Names**: Eliminated duplicate method information (icon already shows method)
-3. **Adjusted Sub-item Indentation**: Updated Parameters and Request Body indentation to 11 spaces to align perfectly under URLs
-
-#### Example Before vs After
-
-**Before (Misaligned URLs)**:
-```
-  [GET] GET     /api/owners                         listOwners
-  [POST] POST    /api/owners                         addOwner  
-  [DEL] DELETE  /api/owners/{ownerId}               deleteOwner
-```
-
-**After (Perfect Alignment)**:
-```
-  [GET]    /api/owners                              listOwners
-           Parameters: lastName
-  [POST]   /api/owners                              addOwner
-           Request Body: OwnerFieldsDto
-  [DEL]    /api/owners/{ownerId}                    deleteOwner
-           Parameters: ownerId
-```
-
-#### Technical Implementation
-
-**Key Changes**:
-```java
-// Fixed 8-character width for method icon ensures perfect URL alignment
-String methodDisplay = String.format("%-8s", methodIcon);
-String path = String.format("%-40s", truncate(endpoint.getPath(), 40));
-
-// Simplified output format removes redundant method name
-System.out.printf("  %s %s %s%s%n",
-    methodDisplay,    // 8 chars fixed width
-    path,            // 40 chars fixed width  
-    methodName,
-    deprecatedFlag
-);
-
-// Updated sub-item indentation (2 + 8 + 1 = 11 spaces)
-System.out.printf("           Parameters: %s%n", params);
-System.out.printf("           Request Body: %s%n", bodyType);
-```
-
-#### User Experience Benefits
-
-1. **Perfect Visual Alignment**: All URLs start at exactly the same column position
-2. **Cleaner Appearance**: Removed redundant method names for cleaner output
-3. **Professional Presentation**: Enterprise-quality formatting suitable for documentation
-4. **Consistent Visual Structure**: Predictable column layout regardless of method types
-5. **Enhanced Readability**: Easy to scan endpoint lists with perfect alignment
-
-#### Test Coverage
-Updated `testProfessionalIndentationFormatting` to verify:
-- Parameters and Request Body lines use 11-space indentation
-- Perfect alignment under URLs regardless of HTTP method type
-- Consistent formatting across all endpoint types
-
-This alignment fix ensures APISCAN produces perfectly formatted, professional reports with consistent visual structure.
+### Perfect Vertical URL Alignment Fix
+Fixed the vertical alignment problem where endpoint URLs were not perfectly aligned due to inconsistent HTTP method icon widths:
+1. **Fixed Method Icon Width**: Used consistent 8-character width for all method icons
+2. **Removed Redundant Method Names**: Eliminated duplicate method information
+3. **Adjusted Sub-item Indentation**: Updated Parameters and Request Body indentation to align perfectly under URLs
 
 ## Enhanced OpenAPI Generation with Enterprise-Grade Features
 
 ### Comprehensive OpenAPI 3.0.3 Specification Enhancement
-
-APISCAN's OpenAPI generation has been significantly enhanced to produce enterprise-grade specifications that closely match industry standards and provide comprehensive API documentation.
+APISCAN's OpenAPI generation produces enterprise-grade specifications that closely match industry standards.
 
 #### Key Enhancements Implemented
-
-1. **Auto-Generated Summaries and Descriptions**:
-   - **Smart Summary Generation**: Automatically creates human-readable summaries based on HTTP method and resource
-     - GET `/api/owners` → "List owners"
-     - GET `/api/owners/{id}` → "Get a owner by ID" 
-     - POST `/api/owners` → "Create a owner"
-     - PUT `/api/owners/{id}` → "Update a owner by ID"
-     - DELETE `/api/owners/{id}` → "Delete a owner by ID"
-   
-   - **Intelligent Descriptions**: Generates appropriate operation descriptions
-     - List operations: "Returns an array of [resources]."
-     - Single resource: "Returns the [resource] or a 404 error."
-     - Create operations: "Creates a [resource]."
-     - Update operations: "Updates the [resource] or returns a 404 error."
-
-2. **Enhanced Parameter Documentation**:
-   - **Auto-Generated Parameter Descriptions**: Path parameters automatically get descriptions like "The ID of the owner."
-   - **Type Constraints**: Integer parameters include `format: int32` and `minimum: 0` for ID fields
-   - **Proper Schema Validation**: Comprehensive type mapping from Java to OpenAPI types
-
-3. **Multiple HTTP Response Codes**:
-   - **Success Responses**: 
-     - 200 for GET/PUT/DELETE operations
-     - 201 for POST operations (resource creation)
-   - **Error Responses**:
-     - 400: "Bad request."
-     - 404: "[Resource] not found." (for endpoints with path parameters)
-     - 500: "Server error."
-
-4. **Professional Response Content**:
-   - **Proper Content Types**: `application/json` with correct schema references
-   - **Array Responses**: Properly structured for list endpoints
-   - **DTO Schema References**: Clean `$ref` references to components/schemas
-
-#### Real-World Impact
-
-**Before Enhancement**:
-```yaml
-get:
-  operationId: OwnerRestController_getOwner
-  parameters:
-  - name: ownerId
-    in: path
-    required: true
-    schema:
-      type: integer
-  responses:
-    "200":
-      description: Successful response
-```
-
-**After Enhancement**:
-```yaml
-get:
-  tags:
-  - Owner
-  summary: Get a owner by ID
-  description: Returns the owner or a 404 error.
-  operationId: OwnerRestController_getOwner
-  parameters:
-  - name: ownerId
-    in: path
-    description: The ID of the owner.
-    required: true
-    schema:
-      minimum: 0
-      type: integer
-      format: int32
-  responses:
-    "200":
-      description: Successful response
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/OwnerDto'
-    "400":
-      description: Bad request.
-    "404":
-      description: owner not found.
-    "500":
-      description: Server error.
-```
-
-#### Technical Implementation
-
-**SwaggerCoreOpenApiGenerator Enhancements**:
-- `generateSummary()`: Intelligent summary generation based on HTTP method and resource type
-- `generateDescription()`: Context-aware descriptions for different operation types
-- `extractResourceFromPath()`: Smart resource name extraction from URL paths with pluralization handling
-- `addDefaultResponses()`: Comprehensive response code generation based on operation type
-- Enhanced parameter building with descriptions and constraints
-
-**Resource Name Intelligence**:
-- Plural to singular conversion: "owners" → "owner", "specialties" → "specialty"
-- Path parsing to extract meaningful resource names
-- Special handling for nested resources and API prefixes
+1. **Auto-Generated Summaries and Descriptions**: Smart summary generation based on HTTP method and resource
+2. **Enhanced Parameter Documentation**: Auto-generated parameter descriptions and type constraints
+3. **Multiple HTTP Response Codes**: Success responses (200, 201) and error responses (400, 404, 500)
+4. **Professional Response Content**: Proper content types and DTO schema references
 
 #### Enterprise Benefits
-
-1. **Professional Documentation**: Generated specifications are suitable for external API documentation
+1. **Professional Documentation**: Generated specifications suitable for external API documentation
 2. **Tool Compatibility**: Works seamlessly with Swagger UI, Postman, ReDoc, and other OpenAPI tools
 3. **Code Generation Ready**: Specifications can be used to generate client libraries and server stubs
 4. **Industry Standard Compliance**: Follows OpenAPI 3.0.3 best practices and conventions
 5. **Comprehensive Coverage**: Covers all major API documentation requirements out of the box
 
-#### Test Coverage
+## Advanced Schema Generation Fixes
 
-Added comprehensive test `testEnhancedOpenApiFeatures` that verifies:
-- Auto-generated summaries match expected patterns
-- Descriptions are contextually appropriate
-- Multiple response codes are included (200, 400, 404, 500)
-- Parameter descriptions and constraints are properly set
-- POST operations use 201 status codes
-- GET operations with path parameters include 404 responses
+### @ApiIgnore Annotation Support
+APISCAN now properly handles field exclusion annotations to prevent unwanted fields from appearing in OpenAPI specifications.
 
-This enhancement transforms APISCAN from a basic endpoint scanner into a comprehensive API documentation generator that produces enterprise-ready OpenAPI specifications matching industry standards like those from major API providers.
+#### Supported Exclusion Annotations
+- **@ApiIgnore**: Standard Swagger/OpenAPI field exclusion
+- **@JsonIgnore**: Jackson JSON serialization exclusion
+- **@Hidden**: Alternative OpenAPI field hiding annotation
+
+#### Implementation Benefits
+1. **Clean API Documentation**: Excludes internal/sensitive fields from public API documentation
+2. **Framework Compatibility**: Supports multiple annotation frameworks (Swagger, Jackson, OpenAPI)
+3. **Inheritance Support**: Properly handles excluded fields in class inheritance hierarchies
+
+### Circular Reference Resolution
+Enhanced DTO schema resolution prevents infinite loops and excessive nesting in complex entity relationships.
+
+#### Key Improvements
+1. **Reference-Based Schemas**: Uses `$ref` links instead of inline schema expansion
+2. **Depth-Limited Resolution**: Configurable maximum resolution depth (default: 3 levels)
+3. **Circular Reference Detection**: Prevents infinite recursion during schema resolution
+4. **Proper Collection Handling**: Correctly identifies and handles `java.util.List`, `Set`, and `Collection` types
+
+#### Real-World Impact
+- **Before Fix**: Shopizer `reviews` and `attributes` fields generated 1000+ line nested schemas
+- **After Fix**: Clean `$ref` references with controlled depth and proper schema separation
+
+### Technical Implementation Details
+1. **Enhanced DtoSchemaResolver**: 
+   - `isApiIgnoredField()`: Multi-framework annotation detection
+   - `getAllResolvedSchemas()`: Controlled recursive schema resolution
+   - `findReferencedSchemas()`: Reference tracking and validation
+
+2. **Improved SwaggerCoreOpenApiGenerator**:
+   - Removed immediate recursive resolution to prevent circular references
+   - Uses `getAllResolvedSchemas()` for final schema collection
+   - Limited depth schema resolution (3 levels default)
+
+### Test Coverage
+- **ApiIgnoreSupportTest**: Validates @ApiIgnore, @JsonIgnore, @Hidden annotation handling
+- **CircularReferenceFixTest**: Tests circular reference prevention and depth limiting
+- **ShopizerComplexSchemaTest**: Tests complex nested schema scenarios similar to enterprise e-commerce platforms
+- **Full Regression Testing**: All existing functionality preserved and enhanced
+
+## Java Runtime Compatibility
+
+### System Requirements
+- **Minimum Java Version**: Java 17
+- **Recommended Java Version**: Java 17 or later
+- **Testing**: Tested with Java 17 and Java 21
+
+### Runtime Environment Notes
+- APISCAN is compiled with Java 17 target for optimal performance and modern language features
+- Uses modern Java APIs including Files.readString(), Files.writeString(), Set.of(), Optional.isEmpty(), and String.repeat()
+- For deployment environments with older Java versions, consider upgrading the runtime to Java 17+ for full compatibility
+
+## Complex Schema Generation Enhancements
+
+### Shopizer-Class Enterprise Schema Resolution
+APISCAN has been enhanced to handle complex enterprise-grade schema hierarchies like those found in Shopizer e-commerce platform.
+
+#### Key Improvements for Complex Schemas
+1. **Increased Resolution Depth**: Default depth increased from 3 to 7 levels to handle deep nested enterprise entities
+2. **Enhanced Reference Detection**: Improved findReferencedSchemas method to discover all schema references including allOf, oneOf, anyOf combinations
+3. **Advanced Schema Name Sanitization**: Handles edge cases like generic types, arrays, and invalid OpenAPI component names
+4. **Duplicate Field Prevention**: Eliminates duplicate required fields from inheritance hierarchies
+
+#### Real-World Impact
+- **Shopizer Before**: Multiple resolver errors with missing schema references (ProductPrice, ProductVariation, CustomerGender, etc.)
+- **Shopizer After**: Clean schema resolution with proper $ref references and comprehensive component schema generation
+- **Enterprise Scalability**: Handles complex multi-level entity relationships common in enterprise e-commerce platforms
+
+#### Technical Enhancements
+- **Consistent Schema Name Sanitization**: 
+  - Converts problematic names like `?`, `byte[]`, and generic types to valid OpenAPI component names
+  - Applied consistently across the entire schema generation pipeline (caching, resolution, and component generation)
+  - Handles edge cases: `?` → `UnknownType`, `byte[]` → `ByteArray`, generic types stripped to base type
+  - Ensures all schema references use sanitized names to prevent OpenAPI validation errors
+- **Reference Resolution**: Comprehensive reference tracking across nested properties, array items, and schema compositions
+- **Duplicate Prevention**: LinkedHashSet-based deduplication of required field lists
+- **Performance Optimization**: Controlled depth limits prevent infinite recursion while allowing sufficient resolution depth
+
+## Schema Name Validation & OpenAPI Compliance Fixes
+
+### Critical Schema Name Sanitization Enhancement
+APISCAN now provides comprehensive schema name sanitization to ensure full OpenAPI 3.0.3 specification compliance and eliminate semantic validation errors.
+
+#### Problem Resolved
+- **Before**: Invalid schema component names like `?` and `byte[]` caused semantic validation errors
+- **After**: All schema names are properly sanitized to comply with OpenAPI naming requirements
+
+#### Solution Implemented
+1. **Consistent Sanitization Pipeline**: Schema names are sanitized at all points in the generation process:
+   - During schema caching in `DtoSchemaResolver`
+   - When creating schema references (`$ref` links)
+   - Before adding schemas to OpenAPI components section
+
+2. **Comprehensive Edge Case Handling**:
+   ```java
+   "?" → "UnknownType"
+   "byte[]" → "ByteArray" 
+   "List<String>" → "List" (generic types stripped)
+   "com.example.ClassName" → "ClassName" (package names removed)
+   ```
+
+3. **OpenAPI Compliance**: All schema names now comply with OpenAPI component naming rules (A-Z a-z 0-9 - . _)
+
+#### Real-World Impact
+**Shopizer E-commerce Platform Results**:
+- **Before**: Multiple semantic errors for invalid component names
+- **After**: ✅ Zero semantic validation errors, 145 schemas with valid names
+- **Enterprise Ready**: Generated specifications pass validation in tools like Swagger UI, Postman, and automated CI/CD pipelines
+
+## DTO Schema Optimization & Field Filtering
+
+### Improved DTO Schema Generation
+APISCAN now includes sophisticated field filtering to ensure DTO schemas contain only appropriate business fields and exclude problematic internal Java fields.
+
+#### Problem Resolved
+- **Before**: DTO schemas included inappropriate fields like `DEFAULT_STRING_COLLATOR`, `serialVersionUID`, and other static/internal fields
+- **After**: Clean DTO schemas with only business-relevant instance fields
+
+#### Solution Implemented
+**Smart Field Filtering with `shouldIncludeField()` method**:
+1. **Static Field Exclusion**: Automatically excludes static fields that are not part of instance data
+2. **Problematic Field Name Detection**: Filters out fields with names like:
+   - `DEFAULT_STRING_COLLATOR` and other `DEFAULT_*` patterns
+   - `serialVersionUID` (Java serialization field)  
+   - Fields containing `COLLATOR` (internal Java utility fields)
+3. **API Annotation Respect**: Continues to honor `@ApiIgnore`, `@JsonIgnore`, and `@Hidden` annotations
+4. **Access-Based Filtering**: Only includes fields that are public or have getter methods
+
+#### Real-World Impact
+**Shopizer E-commerce Platform Results**:
+- **PersistableCustomerAttribute**: Reduced from 5 to 4 properties (removed `DEFAULT_STRING_COLLATOR`)
+- **PersistableCategory**: Reduced from 16 to 15 properties  
+- **MerchantStore**: Reduced from 22 to 20 properties
+- **AjaxResponse**: Reduced from 10 to 5 properties
+- **Cleaner Schemas**: Generated OpenAPI specifications now contain only business-relevant fields
+
+#### Technical Implementation
+- **Enhanced Field Detection**: Modified both direct field parsing and inherited field parsing
+- **Comprehensive Test Coverage**: Added `StaticFieldFilteringTest` to verify filtering behavior
+- **Backward Compatibility**: All existing functionality preserved while improving schema quality
+
+## Intelligent Package Resolution & DTO Prioritization
+
+### Multi-Module DTO Package Prioritization
+APISCAN now includes sophisticated package resolution that correctly prioritizes DTO layer classes over JPA entity classes in complex multi-module Maven projects.
+
+#### Problem Resolved
+- **Before**: When multiple classes with the same name existed (e.g., `CustomerOption` in both DTO and JPA layers), APISCAN would find the first match, often selecting complex JPA entities instead of simple DTO classes
+- **After**: Intelligent prioritization selects appropriate DTO layer classes for OpenAPI documentation
+
+#### Real-World Case Study: Shopizer E-commerce Platform
+**Complex Multi-Module Structure**:
+```
+shopizer/
+├── sm-shop/ (main application)
+├── sm-shop-model/ (simple DTO classes) 
+└── sm-core-model/ (complex JPA entities)
+```
+
+**Before**: 
+- `CustomerOption`: 9 properties (complex JPA entity with merchantStore, descriptions, etc.)
+- `CustomerOptionValue`: 6 properties (complex with images, descriptions, etc.)
+
+**After**:
+- `CustomerOption`: 1 property (`id` only - simple DTO)
+- `CustomerOptionValue`: 1 property (`id` only - simple DTO)
+
+#### Technical Implementation
+**Enhanced Multi-Module Search with Prioritization**:
+1. **Comprehensive Module Discovery**: Searches all potential Maven modules in project hierarchy
+2. **Multi-Match Collection**: Collects ALL matches across ALL modules before prioritization
+3. **Intelligent Package Prioritization**: Uses priority order:
+   ```java
+   // Highest Priority (DTO layers)
+   "sm-shop-model", "shop.model", "api.model", "dto", "generated"
+   
+   // Lower Priority (JPA entity layers)  
+   "sm-core-model", "core.model", "entity", "domain", "persistence"
+   ```
+4. **Debug Logging**: Provides clear visibility into selection process
+
+#### Results
+**CustomerOption and CustomerOptionValue Schemas**:
+- ✅ **Simplified to single `id` property** (from 9 and 6 properties respectively)
+- ✅ **Clean PersistableCustomerAttribute references** without bloated JPA entity fields
+- ✅ **Enterprise API Documentation Quality** with appropriate abstraction levels
+
+**Multi-Match Detection and Resolution**:
+- Successfully prioritized **20+ different class conflicts** in Shopizer
+- Automatic selection of DTO-appropriate versions across Categories, Products, Customers, and Attributes
+- Maintained backward compatibility with single-module projects

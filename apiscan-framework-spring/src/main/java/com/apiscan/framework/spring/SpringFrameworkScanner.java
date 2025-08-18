@@ -121,8 +121,8 @@ public class SpringFrameworkScanner implements FrameworkScanner {
         String interfaceName = interfaceDecl.getNameAsString();
         
         for (MethodDeclaration method : interfaceDecl.getMethods()) {
-            Optional<ApiEndpoint> endpoint = extractEndpoint(method, baseUrl, interfaceName);
-            endpoint.ifPresent(result::addEndpoint);
+            List<ApiEndpoint> endpoints = extractAllEndpoints(method, baseUrl, interfaceName);
+            endpoints.forEach(result::addEndpoint);
         }
     }
     
@@ -132,8 +132,8 @@ public class SpringFrameworkScanner implements FrameworkScanner {
         
         // First, try to extract endpoints from the controller methods directly
         for (MethodDeclaration method : clazz.getMethods()) {
-            Optional<ApiEndpoint> endpoint = extractEndpoint(method, baseUrl, className);
-            endpoint.ifPresent(result::addEndpoint);
+            List<ApiEndpoint> endpoints = extractAllEndpoints(method, baseUrl, className);
+            endpoints.forEach(result::addEndpoint);
         }
         
         // Then, check if the controller implements interfaces and scan those for endpoints
@@ -145,7 +145,7 @@ public class SpringFrameworkScanner implements FrameworkScanner {
     private void scanImplementedInterfaces(ClassOrInterfaceDeclaration clazz, CompilationUnit cu, 
                                          JavaSourceParser parser, ScanResult result, 
                                          String baseUrl, String className, Map<String, ClassOrInterfaceDeclaration> apiInterfaces) {
-        for (var implementedType : clazz.getImplementedTypes()) {
+        for (com.github.javaparser.ast.type.ClassOrInterfaceType implementedType : clazz.getImplementedTypes()) {
             String interfaceName = implementedType.getNameAsString();
             
             // Check if we have the interface in our pre-collected map
@@ -180,8 +180,8 @@ public class SpringFrameworkScanner implements FrameworkScanner {
         for (MethodDeclaration interfaceMethod : interfaceDecl.getMethods()) {
             // Check if the controller implements this method
             if (hasMatchingMethod(controllerClass, interfaceMethod)) {
-                Optional<ApiEndpoint> endpoint = extractEndpointFromInterface(interfaceMethod, finalBaseUrl, className);
-                endpoint.ifPresent(result::addEndpoint);
+                List<ApiEndpoint> endpoints = extractAllEndpointsFromInterface(interfaceMethod, finalBaseUrl, className);
+                endpoints.forEach(result::addEndpoint);
             }
         }
     }
@@ -196,6 +196,11 @@ public class SpringFrameworkScanner implements FrameworkScanner {
     private Optional<ApiEndpoint> extractEndpointFromInterface(MethodDeclaration method, String baseUrl, String className) {
         // Extract endpoint information from interface method (which should have the annotations)
         return extractEndpoint(method, baseUrl, className);
+    }
+    
+    private List<ApiEndpoint> extractAllEndpointsFromInterface(MethodDeclaration method, String baseUrl, String className) {
+        // Extract all endpoints from interface method (which should have the annotations)
+        return extractAllEndpoints(method, baseUrl, className);
     }
     
     private void inferEndpointsFromOverrideMethods(ClassOrInterfaceDeclaration controllerClass, 
@@ -412,20 +417,71 @@ public class SpringFrameworkScanner implements FrameworkScanner {
         }
         
         AnnotationExpr annotation = mappingAnnotation.get();
+        
+        // Extract all paths from the annotation
+        List<String> paths = extractAllPaths(annotation);
+        
+        // For backward compatibility, return the first endpoint
+        // The scanner methods will be updated to handle multiple paths
+        if (paths.isEmpty()) {
+            return Optional.empty();
+        }
+        
+        ApiEndpoint endpoint = createEndpoint(method, baseUrl, className, annotation, paths.get(0));
+        return Optional.ofNullable(endpoint);
+    }
+    
+    /**
+     * Extract all endpoints from a method that may have multiple path patterns.
+     * This replaces the single endpoint extraction for methods with multiple paths.
+     */
+    private List<ApiEndpoint> extractAllEndpoints(MethodDeclaration method, String baseUrl, String className) {
+        List<ApiEndpoint> endpoints = new ArrayList<>();
+        
+        Optional<AnnotationExpr> mappingAnnotation = method.getAnnotations().stream()
+            .filter(ann -> HTTP_METHOD_ANNOTATIONS.contains(ann.getNameAsString()))
+            .findFirst();
+        
+        if (!mappingAnnotation.isPresent()) {
+            return endpoints;
+        }
+        
+        AnnotationExpr annotation = mappingAnnotation.get();
+        List<String> paths = extractAllPaths(annotation);
+        
+        // Create separate endpoint for each path
+        for (String path : paths) {
+            ApiEndpoint endpoint = createEndpoint(method, baseUrl, className, annotation, path);
+            if (endpoint != null) {
+                endpoints.add(endpoint);
+            }
+        }
+        
+        return endpoints;
+    }
+    
+    /**
+     * Create a single endpoint with the specified path.
+     */
+    private ApiEndpoint createEndpoint(MethodDeclaration method, String baseUrl, String className, 
+                                     AnnotationExpr annotation, String path) {
         ApiEndpoint endpoint = new ApiEndpoint();
         
         // Set basic information
         endpoint.setControllerClass(className);
         endpoint.setMethodName(method.getNameAsString());
-        endpoint.setOperationId(className + "_" + method.getNameAsString());
+        
+        // Create unique operationId for multiple paths
+        String fullPath = combinePaths(baseUrl, path);
+        String operationId = generateUniqueOperationId(className, method.getNameAsString(), fullPath);
+        endpoint.setOperationId(operationId);
         
         // Extract HTTP method
         String httpMethod = extractHttpMethod(annotation);
         endpoint.setHttpMethod(httpMethod);
         
-        // Extract path
-        String path = extractPath(annotation);
-        endpoint.setPath(combinePaths(baseUrl, path));
+        // Set the specific path
+        endpoint.setPath(fullPath);
         
         // Extract parameters
         extractParameters(method, endpoint);
@@ -444,7 +500,31 @@ public class SpringFrameworkScanner implements FrameworkScanner {
             endpoint.setDescription(javadoc.getDescription().toText());
         });
         
-        return Optional.of(endpoint);
+        return endpoint;
+    }
+    
+    /**
+     * Generate a unique operation ID that includes path information to avoid conflicts
+     * when the same method maps to multiple paths.
+     */
+    private String generateUniqueOperationId(String className, String methodName, String path) {
+        String baseOperationId = className + "_" + methodName;
+        
+        // If path is empty or just "/", use base operation ID
+        if (path == null || path.equals("/") || path.isEmpty()) {
+            return baseOperationId;
+        }
+        
+        // Create a suffix from the path to make it unique
+        String pathSuffix = path.replaceAll("[^a-zA-Z0-9]", "_")
+                               .replaceAll("_{2,}", "_")
+                               .replaceAll("^_|_$", "");
+        
+        if (!pathSuffix.isEmpty()) {
+            return baseOperationId + "_" + pathSuffix;
+        }
+        
+        return baseOperationId;
     }
     
     private String extractHttpMethod(AnnotationExpr annotation) {
@@ -513,6 +593,68 @@ public class SpringFrameworkScanner implements FrameworkScanner {
             }
         }
         return "";
+    }
+    
+    /**
+     * Extract all paths from an annotation that may contain multiple path values.
+     * This is used for handling annotations like @GetMapping({ "/path1", "/path2" }).
+     */
+    private List<String> extractAllPaths(AnnotationExpr annotation) {
+        List<String> paths = new ArrayList<>();
+        
+        if (annotation instanceof SingleMemberAnnotationExpr) {
+            SingleMemberAnnotationExpr singleAnn = (SingleMemberAnnotationExpr) annotation;
+            Expression memberValue = singleAnn.getMemberValue();
+            
+            // Check if the member value is actually an array
+            if (memberValue instanceof ArrayInitializerExpr) {
+                ArrayInitializerExpr array = (ArrayInitializerExpr) memberValue;
+                for (Expression pathExpr : array.getValues()) {
+                    String path = cleanPath(pathExpr.toString());
+                    if (!path.isEmpty()) {
+                        paths.add(path);
+                    }
+                }
+            } else {
+                String path = cleanPath(memberValue.toString());
+                if (!path.isEmpty()) {
+                    paths.add(path);
+                }
+            }
+        } else if (annotation instanceof NormalAnnotationExpr) {
+            NormalAnnotationExpr normalAnn = (NormalAnnotationExpr) annotation;
+            
+            // Look for "value" or "path" attribute
+            Optional<MemberValuePair> pathPair = normalAnn.getPairs().stream()
+                .filter(pair -> pair.getNameAsString().equals("value") || 
+                              pair.getNameAsString().equals("path"))
+                .findFirst();
+            
+            if (pathPair.isPresent()) {
+                Expression value = pathPair.get().getValue();
+                if (value instanceof ArrayInitializerExpr) {
+                    ArrayInitializerExpr array = (ArrayInitializerExpr) value;
+                    for (Expression pathExpr : array.getValues()) {
+                        String path = cleanPath(pathExpr.toString());
+                        if (!path.isEmpty()) {
+                            paths.add(path);
+                        }
+                    }
+                } else {
+                    String path = cleanPath(value.toString());
+                    if (!path.isEmpty()) {
+                        paths.add(path);
+                    }
+                }
+            }
+        }
+        
+        // If no paths found, return empty string as default
+        if (paths.isEmpty()) {
+            paths.add("");
+        }
+        
+        return paths;
     }
     
     private String cleanPath(String path) {

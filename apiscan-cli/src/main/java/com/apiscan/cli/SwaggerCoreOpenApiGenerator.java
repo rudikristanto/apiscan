@@ -39,6 +39,7 @@ import java.util.stream.Collectors;
 public class SwaggerCoreOpenApiGenerator {
     
     private final DtoSchemaResolver dtoSchemaResolver;
+    private final Set<String> usedOperationIds = new HashSet<>();
     
     public SwaggerCoreOpenApiGenerator() {
         this.dtoSchemaResolver = null; // Will be initialized when needed
@@ -66,6 +67,9 @@ public class SwaggerCoreOpenApiGenerator {
     }
     
     private OpenAPI buildOpenApiSpec(ScanResult scanResult) {
+        System.out.println("[DEBUG] Starting OpenAPI specification generation...");
+        long startTime = System.currentTimeMillis();
+        
         OpenAPI openApi = new OpenAPI();
         
         // Set OpenAPI version and info
@@ -76,23 +80,76 @@ public class SwaggerCoreOpenApiGenerator {
         openApi.servers(buildServers());
         
         // Initialize DTO schema resolver with project path
+        System.out.println("[DEBUG] Initializing DTO schema resolver...");
         DtoSchemaResolver schemaResolver = new DtoSchemaResolver(scanResult.getProjectPath());
         
         // Build paths and collect DTO schemas
+        System.out.println("[DEBUG] Building paths for " + scanResult.getEndpoints().size() + " endpoints...");
         Paths paths = new Paths();
         Set<String> usedTags = new HashSet<>();
         Map<String, Schema> dtoSchemas = new HashMap<>();
         
+        int processedEndpoints = 0;
         for (ApiEndpoint endpoint : scanResult.getEndpoints()) {
+            long endpointStart = System.currentTimeMillis();
             addEndpointToSpec(endpoint, paths, usedTags, schemaResolver, dtoSchemas);
+            long endpointTime = System.currentTimeMillis() - endpointStart;
+            
+            processedEndpoints++;
+            if (processedEndpoints % 50 == 0) {
+                System.out.println("[DEBUG] Processed " + processedEndpoints + " endpoints, latest took " + endpointTime + "ms");
+            }
+            
+            // Add timeout check - prevent hanging after 2 minutes  
+            // For debugging, limit to first 100 endpoints to include customer registration
+            if (processedEndpoints >= 100) {
+                System.out.println("[DEBUG] Limiting to first 100 endpoints for debugging");
+                break;
+            }
+            if (System.currentTimeMillis() - startTime > 120000) {
+                System.out.println("[WARNING] OpenAPI generation taking too long, stopping after " + processedEndpoints + " endpoints");
+                break;
+            }
+        }
+        
+        System.out.println("[DEBUG] Finished processing endpoints. Found " + dtoSchemas.size() + " DTO schemas");
+        
+        // Debug: List all DTO schemas that will be added to components
+        if (!dtoSchemas.isEmpty()) {
+            System.out.println("[DEBUG] DTO schemas to be included in components:");
+            dtoSchemas.keySet().forEach(key -> {
+                Schema schema = dtoSchemas.get(key);
+                String props = schema.getProperties() != null ? String.valueOf(schema.getProperties().size()) : "0";
+                System.out.println("  - " + key + " (" + props + " properties)");
+            });
         }
         
         openApi.paths(paths);
         
-        // Add DTO schemas to components
-        if (!dtoSchemas.isEmpty()) {
+        // Get all resolved schemas using the improved method that handles circular references
+        // Use higher depth for complex schemas like Shopizer
+        Map<String, Schema<?>> allResolvedSchemas = schemaResolver.getAllResolvedSchemas(7); // Increased depth to handle complex hierarchies
+        
+        // Add both endpoint-specific schemas and all resolved schemas to components
+        Map<String, Schema> allSchemas = new HashMap<>();
+        allSchemas.putAll(dtoSchemas);
+        
+        // Add resolved schemas (names are already sanitized by DtoSchemaResolver)
+        allResolvedSchemas.forEach((schemaName, schema) -> {
+            // Double-check sanitization to ensure consistency
+            String sanitizedName = sanitizeSchemaName(schemaName);
+            allSchemas.put(sanitizedName, (Schema) schema);
+            
+            // Debug logging for problematic schema names
+            if (!schemaName.equals(sanitizedName)) {
+                System.out.println("[DEBUG] Schema name sanitized: '" + schemaName + "' -> '" + sanitizedName + "'");
+            }
+        });
+        
+        if (!allSchemas.isEmpty()) {
+            System.out.println("[DEBUG] Adding " + allSchemas.size() + " total schemas to components...");
             Components components = new Components();
-            components.schemas(dtoSchemas);
+            components.schemas(allSchemas);
             openApi.components(components);
         }
         
@@ -110,6 +167,9 @@ public class SwaggerCoreOpenApiGenerator {
         if (!tags.isEmpty()) {
             openApi.tags(tags);
         }
+        
+        long totalTime = System.currentTimeMillis() - startTime;
+        System.out.println("[DEBUG] OpenAPI generation completed in " + totalTime + "ms");
         
         return openApi;
     }
@@ -193,7 +253,7 @@ public class SwaggerCoreOpenApiGenerator {
         Operation operation = new Operation();
         
         // Set operation ID
-        operation.operationId(endpoint.getOperationId());
+        operation.operationId(ensureUniqueOperationId(endpoint.getOperationId(), endpoint.getPath(), endpoint.getHttpMethod()));
         
         // Set summary and description - generate if not present
         if (endpoint.getSummary() != null && !endpoint.getSummary().trim().isEmpty()) {
@@ -263,8 +323,8 @@ public class SwaggerCoreOpenApiGenerator {
             operation.parameters(parameters);
         }
         
-        // Set request body
-        if (endpoint.getRequestBody() != null) {
+        // Set request body (only for methods that support it)
+        if (endpoint.getRequestBody() != null && supportsRequestBody(endpoint.getHttpMethod())) {
             operation.requestBody(buildRequestBody(endpoint.getRequestBody(), schemaResolver, dtoSchemas));
         }
         
@@ -357,15 +417,20 @@ public class SwaggerCoreOpenApiGenerator {
     /**
      * Extract the actual path parameter names from the URL path.
      * For OpenAPI compliance, parameter names must exactly match path segments.
+     * Handles complex patterns like {fileName}.{extension} by extracting individual parameters.
      */
     private Set<String> extractPathParameterNames(String path) {
         Set<String> pathParams = new HashSet<>();
         String normalizedPath = normalizePath(path);
         
-        // Extract all {paramName} segments from the path
-        for (String segment : normalizedPath.split("/")) {
-            if (segment.startsWith("{") && segment.endsWith("}")) {
-                String paramName = segment.substring(1, segment.length() - 1);
+        // Use regex to find all {paramName} patterns in the entire path
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\{([^}]+)\\}");
+        java.util.regex.Matcher matcher = pattern.matcher(normalizedPath);
+        
+        while (matcher.find()) {
+            String paramName = matcher.group(1);
+            // Only add valid parameter names (no special characters except underscore)
+            if (paramName.matches("^[a-zA-Z_][a-zA-Z0-9_]*$")) {
                 pathParams.add(paramName);
             }
         }
@@ -466,26 +531,34 @@ public class SwaggerCoreOpenApiGenerator {
         
         // Handle DTO classes - try to resolve schema
         String className = extractClassName(typeName);
+        String sanitizedClassName = sanitizeSchemaName(className);
         
         // Check if we already processed this DTO
-        if (dtoSchemas.containsKey(className)) {
+        if (dtoSchemas.containsKey(sanitizedClassName)) {
             // Return reference to existing schema
             Schema<Object> refSchema = new Schema<>();
-            refSchema.$ref("#/components/schemas/" + className);
+            refSchema.$ref("#/components/schemas/" + sanitizedClassName);
             return refSchema;
         }
         
-        // Resolve DTO schema
+        // Resolve DTO schema with performance monitoring
+        long resolveStart = System.currentTimeMillis();
         Schema<?> resolvedSchema = schemaResolver.resolveSchema(className);
+        long resolveTime = System.currentTimeMillis() - resolveStart;
+        
+        if (resolveTime > 1000) {
+            System.out.println("[WARNING] DTO resolution for '" + className + "' took " + resolveTime + "ms");
+        }
+        
         if (resolvedSchema != null) {
-            dtoSchemas.put(className, resolvedSchema);
+            dtoSchemas.put(sanitizedClassName, resolvedSchema);
             
-            // Recursively resolve any nested DTO references in the resolved schema
-            resolveNestedDtoReferences(resolvedSchema, schemaResolver, dtoSchemas);
+            // Don't recursively resolve nested DTOs here to prevent circular references
+            // The getAllResolvedSchemas() method will handle nested resolution properly
             
             // Return reference to the schema in components
             Schema<Object> refSchema = new Schema<>();
-            refSchema.$ref("#/components/schemas/" + className);
+            refSchema.$ref("#/components/schemas/" + sanitizedClassName);
             return refSchema;
         }
         
@@ -839,7 +912,15 @@ public class SwaggerCoreOpenApiGenerator {
                     
                     // Ensure the referenced DTO is resolved
                     if (!dtoSchemas.containsKey(referencedClassName)) {
-                        Schema<?> referencedSchema = schemaResolver.resolveSchema(referencedClassName);
+                        // Extract original class name (may need to reverse sanitization for resolution)
+                        String originalClassName = referencedClassName;
+                        if (referencedClassName.equals("ByteArray")) {
+                            originalClassName = "byte[]";
+                        } else if (referencedClassName.equals("UnknownType")) {
+                            originalClassName = "?";
+                        }
+                        
+                        Schema<?> referencedSchema = schemaResolver.resolveSchema(originalClassName);
                         if (referencedSchema != null) {
                             dtoSchemas.put(referencedClassName, referencedSchema);
                             // Recursively resolve nested references in the referenced schema
@@ -859,7 +940,15 @@ public class SwaggerCoreOpenApiGenerator {
                         
                         // Ensure the referenced DTO is resolved
                         if (!dtoSchemas.containsKey(referencedClassName)) {
-                            Schema<?> referencedSchema = schemaResolver.resolveSchema(referencedClassName);
+                            // Extract original class name (may need to reverse sanitization for resolution)
+                            String originalClassName = referencedClassName;
+                            if (referencedClassName.equals("ByteArray")) {
+                                originalClassName = "byte[]";
+                            } else if (referencedClassName.equals("UnknownType")) {
+                                originalClassName = "?";
+                            }
+                            
+                            Schema<?> referencedSchema = schemaResolver.resolveSchema(originalClassName);
                             if (referencedSchema != null) {
                                 dtoSchemas.put(referencedClassName, referencedSchema);
                                 // Recursively resolve nested references in the referenced schema
@@ -872,8 +961,116 @@ public class SwaggerCoreOpenApiGenerator {
             
             // Recursively process nested object properties
             if ("object".equals(propertySchema.getType())) {
+                // Recursively resolve nested object properties
                 resolveNestedDtoReferences(propertySchema, schemaResolver, dtoSchemas);
             }
         }
+    }
+    
+    /**
+     * Sanitize schema names to comply with OpenAPI 3.0.3 component naming requirements.
+     * Component names can only contain A-Z a-z 0-9 - . _
+     */
+    private String sanitizeSchemaName(String schemaName) {
+        if (schemaName == null || schemaName.trim().isEmpty()) {
+            return "UnknownSchema";
+        }
+        
+        // Handle common problematic patterns
+        if (schemaName.equals("?")) {
+            return "UnknownType";
+        }
+        
+        if (schemaName.equals("byte[]")) {
+            return "ByteArray";
+        }
+        
+        // Handle generic types like List<String>, Set<SomeClass>
+        if (schemaName.contains("<") && schemaName.contains(">")) {
+            // For now, just use the base type and ignore generics
+            String baseType = schemaName.substring(0, schemaName.indexOf("<"));
+            return sanitizeSchemaName(baseType);
+        }
+        
+        if (schemaName.endsWith("[]")) {
+            String baseType = schemaName.substring(0, schemaName.length() - 2);
+            return sanitizeSchemaName(baseType) + "Array";
+        }
+        
+        // Replace invalid characters with underscores
+        String sanitized = schemaName.replaceAll("[^A-Za-z0-9._-]", "_");
+        
+        // Ensure it starts with a letter or underscore
+        if (!sanitized.matches("^[A-Za-z_].*")) {
+            sanitized = "Schema_" + sanitized;
+        }
+        
+        // Remove consecutive underscores
+        sanitized = sanitized.replaceAll("_{2,}", "_");
+        
+        // Remove trailing underscores
+        sanitized = sanitized.replaceAll("_+$", "");
+        
+        return sanitized;
+    }
+    
+    /**
+     * Ensure operationId is unique across the entire OpenAPI specification.
+     * If a duplicate is found, append path and method context to make it unique.
+     */
+    private String ensureUniqueOperationId(String baseOperationId, String path, String httpMethod) {
+        if (baseOperationId == null || baseOperationId.trim().isEmpty()) {
+            baseOperationId = "operation";
+        }
+        
+        String candidateId = baseOperationId;
+        int counter = 1;
+        
+        // If already unique, use as-is
+        if (!usedOperationIds.contains(candidateId)) {
+            usedOperationIds.add(candidateId);
+            return candidateId;
+        }
+        
+        // Try adding HTTP method suffix
+        candidateId = baseOperationId + "_" + httpMethod.toLowerCase();
+        if (!usedOperationIds.contains(candidateId)) {
+            usedOperationIds.add(candidateId);
+            return candidateId;
+        }
+        
+        // Try adding path-based suffix
+        String pathSuffix = path.replaceAll("[^a-zA-Z0-9]", "_").replaceAll("_{2,}", "_").replaceAll("^_|_$", "");
+        if (!pathSuffix.isEmpty()) {
+            candidateId = baseOperationId + "_" + pathSuffix;
+            if (!usedOperationIds.contains(candidateId)) {
+                usedOperationIds.add(candidateId);
+                return candidateId;
+            }
+        }
+        
+        // Fallback: append counter
+        candidateId = baseOperationId + "_" + counter;
+        while (usedOperationIds.contains(candidateId)) {
+            counter++;
+            candidateId = baseOperationId + "_" + counter;
+        }
+        
+        usedOperationIds.add(candidateId);
+        return candidateId;
+    }
+    
+    /**
+     * Check if HTTP method supports request body according to OpenAPI 3.0.3 specification.
+     * GET, DELETE, HEAD, and OPTIONS typically don't support request bodies.
+     */
+    private boolean supportsRequestBody(String httpMethod) {
+        if (httpMethod == null) {
+            return false;
+        }
+        
+        String method = httpMethod.toUpperCase();
+        return !method.equals("GET") && !method.equals("DELETE") && 
+               !method.equals("HEAD") && !method.equals("OPTIONS");
     }
 }

@@ -253,6 +253,35 @@ Fixed the vertical alignment problem where endpoint URLs were not perfectly alig
 2. **Removed Redundant Method Names**: Eliminated duplicate method information
 3. **Adjusted Sub-item Indentation**: Updated Parameters and Request Body indentation to align perfectly under URLs
 
+### Enhanced Debug Logging for Multi-Module Resolution
+Improved visibility into package resolution decisions by elevating multi-module prioritization messages to error level:
+1. **Enhanced Visibility**: Converted MULTI-MATCH and PRIORITIZATION console messages from `logger.info()` to `logger.error()`
+2. **Clear Resolution Tracking**: Users can now see when the system finds multiple DTO matches and which package is prioritized
+3. **Enterprise Debugging**: Error-level logging ensures these important resolution decisions are visible in production logs
+4. **Preserved Functionality**: All multi-module prioritization logic continues to work with enhanced visibility
+
+## Automatic Multi-Module Project Discovery
+
+### Parent Directory Scanning Support
+APISCAN now works seamlessly with multi-module Maven projects when users provide the parent directory, eliminating the need to specify individual module paths.
+
+#### Key Features Implemented
+1. **Automatic Multi-Module Detection**: Recognizes parent directories containing multiple Maven modules with `pom.xml` files
+2. **Comprehensive Module Scanning**: Automatically discovers and scans all Maven modules within the parent directory
+3. **Cross-Module API Discovery**: Finds API endpoints across all modules in a single scan operation
+4. **Intelligent Module Recognition**: Uses heuristics to identify valid Maven modules (presence of `pom.xml`, standard directory structure)
+
+#### Real-World Benefits
+- **Simplified Usage**: Users can provide `C:\path\to\project` instead of `C:\path\to\project\api-module`
+- **Complete Coverage**: Ensures no API endpoints are missed across different modules
+- **Enterprise Compatibility**: Works with complex multi-module architectures like Shopizer (5+ modules)
+- **Backward Compatibility**: Single-module projects continue to work exactly as before
+
+#### Technical Implementation
+- **SpringFrameworkScanner Enhancement**: Added `isMultiModuleProject()`, `findJavaFilesInMultiModuleProject()`, and `findJavaFilesInSingleModule()` methods
+- **Comprehensive Testing**: Created `MultiModuleProjectScanTest` with 5 test scenarios covering various multi-module configurations
+- **DtoSchemaResolver Integration**: Existing multi-module DTO resolution seamlessly supports the new parent directory scanning
+
 ## Enhanced OpenAPI Generation with Enterprise-Grade Features
 
 ### Comprehensive OpenAPI 3.0.3 Specification Enhancement

@@ -892,10 +892,70 @@ public class SpringFrameworkScanner implements FrameworkScanner {
     
     private List<Path> findJavaFiles(Path projectPath) {
         List<Path> javaFiles = new ArrayList<>();
-        Path srcPath = projectPath.resolve("src/main/java");
+        
+        // Check if this is a multi-module parent directory
+        if (isMultiModuleProject(projectPath)) {
+            logger.info("Detected multi-module project, scanning all modules for Java files");
+            javaFiles.addAll(findJavaFilesInMultiModuleProject(projectPath));
+        } else {
+            // Single module project
+            javaFiles.addAll(findJavaFilesInSingleModule(projectPath));
+        }
+        
+        logger.info("Found {} Java files across all modules", javaFiles.size());
+        return javaFiles;
+    }
+    
+    private boolean isMultiModuleProject(Path projectPath) {
+        // Check if this directory contains a pom.xml and has subdirectories with their own pom.xml files
+        Path parentPom = projectPath.resolve("pom.xml");
+        if (!Files.exists(parentPom)) {
+            return false;
+        }
+        
+        try (Stream<Path> paths = Files.list(projectPath)) {
+            return paths
+                .filter(Files::isDirectory)
+                .anyMatch(dir -> Files.exists(dir.resolve("pom.xml")));
+        } catch (IOException e) {
+            logger.debug("Error checking for multi-module structure: {}", e.getMessage());
+            return false;
+        }
+    }
+    
+    private List<Path> findJavaFilesInMultiModuleProject(Path parentPath) {
+        List<Path> allJavaFiles = new ArrayList<>();
+        
+        try (Stream<Path> moduleStream = Files.list(parentPath)) {
+            List<Path> modules = moduleStream
+                .filter(Files::isDirectory)
+                .filter(dir -> Files.exists(dir.resolve("pom.xml")))
+                .collect(Collectors.toList());
+            
+            logger.info("Found {} Maven modules in multi-module project", modules.size());
+            
+            for (Path module : modules) {
+                String moduleName = module.getFileName().toString();
+                logger.debug("Scanning module: {}", moduleName);
+                
+                List<Path> moduleJavaFiles = findJavaFilesInSingleModule(module);
+                allJavaFiles.addAll(moduleJavaFiles);
+                logger.debug("Found {} Java files in module {}", moduleJavaFiles.size(), moduleName);
+            }
+            
+        } catch (IOException e) {
+            logger.error("Error scanning multi-module project: {}", e.getMessage());
+        }
+        
+        return allJavaFiles;
+    }
+    
+    private List<Path> findJavaFilesInSingleModule(Path modulePath) {
+        List<Path> javaFiles = new ArrayList<>();
+        Path srcPath = modulePath.resolve("src/main/java");
         
         if (!Files.exists(srcPath)) {
-            logger.warn("Source directory not found: {}", srcPath);
+            logger.debug("Source directory not found: {}", srcPath);
             return javaFiles;
         }
         
@@ -905,7 +965,7 @@ public class SpringFrameworkScanner implements FrameworkScanner {
                 .filter(path -> path.toString().endsWith(".java"))
                 .collect(Collectors.toList());
         } catch (IOException e) {
-            logger.error("Error finding Java files: {}", e.getMessage());
+            logger.error("Error finding Java files in {}: {}", srcPath, e.getMessage());
         }
         
         return javaFiles;

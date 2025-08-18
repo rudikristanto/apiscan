@@ -14,13 +14,16 @@ if %ERRORLEVEL% neq 0 (
 echo Running APISCAN on Spring PetClinic REST...
 echo.
 echo The OpenAPI specification will be generated as:
-echo   %CD%\spring-petclinic-rest-openapi.yaml
+@REM echo   %CD%\spring-petclinic-rest-openapi.yaml
+echo   %CD%\shopizer-openapi.yaml
 echo.
-java -jar apiscan-cli\target\apiscan-cli-1.0.0-SNAPSHOT-jar-with-dependencies.jar "C:\Users\Rudi Kristanto\prj\spring-petclinic-rest"
+@REM java -jar apiscan-cli\target\apiscan-cli-1.0.0-SNAPSHOT-jar-with-dependencies.jar "C:\Users\Rudi Kristanto\prj\spring-petclinic-rest"
+java -jar apiscan-cli\target\apiscan-cli-1.0.0-SNAPSHOT-jar-with-dependencies.jar "C:\Users\Rudi Kristanto\prj\shopizer"
 
 echo.
 echo =========================================================
 echo Check the generated OpenAPI file at:
-echo   %CD%\spring-petclinic-rest-openapi.yaml
+@REM echo   %CD%\spring-petclinic-rest-openapi.yaml
+echo   %CD%\shopizer-openapi.yaml
 echo =========================================================
 pause

@@ -195,12 +195,19 @@ public class SwaggerCoreOpenApiGenerator {
         // Set operation ID
         operation.operationId(endpoint.getOperationId());
         
-        // Set summary and description
+        // Set summary and description - generate if not present
         if (endpoint.getSummary() != null && !endpoint.getSummary().trim().isEmpty()) {
             operation.summary(endpoint.getSummary());
+        } else {
+            // Generate summary from method and path
+            operation.summary(generateSummary(endpoint));
         }
+        
         if (endpoint.getDescription() != null && !endpoint.getDescription().trim().isEmpty()) {
             operation.description(endpoint.getDescription());
+        } else {
+            // Generate description from method and path
+            operation.description(generateDescription(endpoint));
         }
         
         // Set tags
@@ -261,17 +268,18 @@ public class SwaggerCoreOpenApiGenerator {
             operation.requestBody(buildRequestBody(endpoint.getRequestBody(), schemaResolver, dtoSchemas));
         }
         
-        // Set responses
+        // Set responses - include multiple status codes
         ApiResponses responses = new ApiResponses();
         if (endpoint.getResponses().isEmpty()) {
-            // Add default response
-            ApiResponse defaultResponse = new ApiResponse();
-            defaultResponse.description("Successful operation");
-            responses.addApiResponse("200", defaultResponse);
+            // Add comprehensive response codes based on HTTP method
+            addDefaultResponses(responses, endpoint, schemaResolver, dtoSchemas);
         } else {
+            // Add explicit responses first
             for (Map.Entry<String, ApiEndpoint.Response> entry : endpoint.getResponses().entrySet()) {
                 responses.addApiResponse(entry.getKey(), buildResponse(entry.getValue(), schemaResolver, dtoSchemas));
             }
+            // Add missing standard error responses
+            addMissingStandardResponses(responses, endpoint, schemaResolver, dtoSchemas);
         }
         operation.responses(responses);
         
@@ -320,11 +328,27 @@ public class SwaggerCoreOpenApiGenerator {
         
         if (param.getDescription() != null && !param.getDescription().trim().isEmpty()) {
             parameter.description(param.getDescription());
+        } else {
+            // Generate description for path parameters
+            if (isPathParameter(paramName, path)) {
+                String resource = extractResourceFromPath(path);
+                parameter.description("The ID of the " + resource + ".");
+            }
         }
         
         // Set schema using Swagger Core Schema
         Schema<Object> schema = new Schema<>();
-        schema.type(mapJavaTypeToOpenApiType(param.getType()));
+        String type = mapJavaTypeToOpenApiType(param.getType());
+        schema.type(type);
+        
+        // Add format and constraints for common parameter types
+        if ("integer".equals(type)) {
+            schema.format("int32");
+            if (isPathParameter(paramName, path) || paramName.toLowerCase().contains("id")) {
+                schema.minimum(new java.math.BigDecimal(0));
+            }
+        }
+        
         parameter.schema(schema);
         
         return parameter;
@@ -456,6 +480,9 @@ public class SwaggerCoreOpenApiGenerator {
         if (resolvedSchema != null) {
             dtoSchemas.put(className, resolvedSchema);
             
+            // Recursively resolve any nested DTO references in the resolved schema
+            resolveNestedDtoReferences(resolvedSchema, schemaResolver, dtoSchemas);
+            
             // Return reference to the schema in components
             Schema<Object> refSchema = new Schema<>();
             refSchema.$ref("#/components/schemas/" + className);
@@ -536,5 +563,317 @@ public class SwaggerCoreOpenApiGenerator {
             return type.substring(start + 1, end).trim();
         }
         return "Object";
+    }
+    
+    /**
+     * Generate a human-readable summary for an operation
+     */
+    private String generateSummary(ApiEndpoint endpoint) {
+        String method = endpoint.getHttpMethod();
+        String path = endpoint.getPath();
+        
+        // Extract resource name from path
+        String resource = extractResourceFromPath(path);
+        
+        switch (method.toUpperCase()) {
+            case "GET":
+                if (path.contains("{")) {
+                    return "Get a " + resource + " by ID";
+                } else {
+                    return "List " + resource + "s";
+                }
+            case "POST":
+                return "Create a " + resource;
+            case "PUT":
+                return "Update a " + resource + " by ID";
+            case "DELETE":
+                return "Delete a " + resource + " by ID";
+            case "PATCH":
+                return "Partially update a " + resource + " by ID";
+            default:
+                return "Operation on " + resource;
+        }
+    }
+    
+    /**
+     * Generate a human-readable description for an operation
+     */
+    private String generateDescription(ApiEndpoint endpoint) {
+        String method = endpoint.getHttpMethod();
+        String resource = extractResourceFromPath(endpoint.getPath());
+        
+        switch (method.toUpperCase()) {
+            case "GET":
+                if (endpoint.getPath().contains("{")) {
+                    return "Returns the " + resource + " or a 404 error.";
+                } else {
+                    return "Returns an array of " + resource + "s.";
+                }
+            case "POST":
+                return "Creates a " + resource + ".";
+            case "PUT":
+                return "Updates the " + resource + " or returns a 404 error.";
+            case "DELETE":
+                return "Deletes the " + resource + " or returns a 404 error.";
+            case "PATCH":
+                return "Partially updates the " + resource + " or returns a 404 error.";
+            default:
+                return "Performs an operation on " + resource + ".";
+        }
+    }
+    
+    /**
+     * Extract resource name from path
+     */
+    private String extractResourceFromPath(String path) {
+        if (path == null || path.isEmpty()) {
+            return "resource";
+        }
+        
+        // Remove parameters and extract the last meaningful segment
+        String[] segments = path.split("/");
+        for (int i = segments.length - 1; i >= 0; i--) {
+            String segment = segments[i];
+            if (!segment.isEmpty() && !segment.contains("{") && !segment.equals("api")) {
+                // Convert from plural to singular and clean up
+                String resource = segment.toLowerCase();
+                if (resource.endsWith("ies")) {
+                    resource = resource.substring(0, resource.length() - 3) + "y";
+                } else if (resource.endsWith("s") && !resource.endsWith("ss")) {
+                    resource = resource.substring(0, resource.length() - 1);
+                }
+                return resource;
+            }
+        }
+        return "resource";
+    }
+    
+    /**
+     * Add default response codes based on HTTP method
+     */
+    private void addDefaultResponses(ApiResponses responses, ApiEndpoint endpoint, 
+                                   DtoSchemaResolver schemaResolver, Map<String, Schema> dtoSchemas) {
+        String method = endpoint.getHttpMethod().toUpperCase();
+        String resource = extractResourceFromPath(endpoint.getPath());
+        
+        // Success response with appropriate content
+        ApiResponse successResponse = new ApiResponse();
+        
+        // Add response content if there are response definitions
+        if (!endpoint.getResponses().isEmpty()) {
+            // Use the first response to determine content type
+            ApiEndpoint.Response firstResponse = endpoint.getResponses().values().iterator().next();
+            if (firstResponse.getContent() != null && !firstResponse.getContent().isEmpty()) {
+                Content content = new Content();
+                for (Map.Entry<String, ApiEndpoint.MediaType> entry : firstResponse.getContent().entrySet()) {
+                    MediaType mediaType = new MediaType();
+                    mediaType.schema(buildSchemaForType(entry.getValue().getSchema(), schemaResolver, dtoSchemas));
+                    content.addMediaType(entry.getKey(), mediaType);
+                }
+                successResponse.content(content);
+            }
+        }
+        
+        switch (method) {
+            case "POST":
+                successResponse.description(resource + " created successfully.");
+                responses.addApiResponse("201", successResponse);
+                break;
+            case "DELETE":
+                successResponse.description(resource + " deleted successfully.");
+                responses.addApiResponse("200", successResponse);
+                break;
+            case "GET":
+                if (endpoint.getPath().contains("{")) {
+                    successResponse.description(resource + " details found and returned.");
+                } else {
+                    successResponse.description("List of " + resource + "s returned successfully.");
+                }
+                responses.addApiResponse("200", successResponse);
+                
+                // Add 304 Not Modified for GET operations (caching)
+                addResponseWithContent(responses, "304", "Not modified.", successResponse.getContent());
+                break;
+            case "PUT":
+            case "PATCH":
+                successResponse.description(resource + " updated successfully.");
+                responses.addApiResponse("200", successResponse);
+                
+                // Add 304 Not Modified for update operations
+                addResponseWithContent(responses, "304", "Not modified.", successResponse.getContent());
+                break;
+            default:
+                successResponse.description("Successful response");
+                responses.addApiResponse("200", successResponse);
+        }
+        
+        // Standard error responses with JSON content
+        addErrorResponseWithJsonContent(responses, "400", "Bad request.", schemaResolver, dtoSchemas);
+        
+        if (endpoint.getPath().contains("{")) {
+            addErrorResponseWithJsonContent(responses, "404", resource + " not found.", schemaResolver, dtoSchemas);
+        }
+        
+        addErrorResponseWithJsonContent(responses, "500", "Server error.", schemaResolver, dtoSchemas);
+    }
+    
+    /**
+     * Add a standard error response
+     */
+    private void addErrorResponse(ApiResponses responses, String code, String description) {
+        ApiResponse errorResponse = new ApiResponse();
+        errorResponse.description(description);
+        responses.addApiResponse(code, errorResponse);
+    }
+    
+    /**
+     * Add response with existing content
+     */
+    private void addResponseWithContent(ApiResponses responses, String code, String description, Content existingContent) {
+        ApiResponse response = new ApiResponse();
+        response.description(description);
+        if (existingContent != null) {
+            response.content(existingContent);
+        }
+        responses.addApiResponse(code, response);
+    }
+    
+    /**
+     * Add error response with JSON content containing ProblemDetail schema
+     */
+    private void addErrorResponseWithJsonContent(ApiResponses responses, String code, String description, 
+                                                DtoSchemaResolver schemaResolver, Map<String, Schema> dtoSchemas) {
+        ApiResponse errorResponse = new ApiResponse();
+        errorResponse.description(description);
+        
+        // Add JSON content with ProblemDetail schema reference
+        Content content = new Content();
+        MediaType mediaType = new MediaType();
+        
+        // Try to resolve ProblemDetail schema, fallback to generic error schema
+        Schema<Object> errorSchema = buildSchemaForType("ProblemDetail", schemaResolver, dtoSchemas);
+        if (errorSchema.get$ref() == null) {
+            // If ProblemDetail not found, create a generic error schema
+            errorSchema = new Schema<>();
+            errorSchema.type("object");
+            errorSchema.description("Error response");
+            
+            // Add common error properties
+            Map<String, Schema> properties = new HashMap<>();
+            Schema<Object> titleSchema = new Schema<>();
+            titleSchema.type("string");
+            titleSchema.description("Error title");
+            properties.put("title", titleSchema);
+            
+            Schema<Object> detailSchema = new Schema<>();
+            detailSchema.type("string");
+            detailSchema.description("Error detail");
+            properties.put("detail", detailSchema);
+            
+            Schema<Object> statusSchema = new Schema<>();
+            statusSchema.type("integer");
+            statusSchema.description("HTTP status code");
+            properties.put("status", statusSchema);
+            
+            errorSchema.properties(properties);
+        }
+        
+        mediaType.schema(errorSchema);
+        content.addMediaType("application/json", mediaType);
+        errorResponse.content(content);
+        
+        responses.addApiResponse(code, errorResponse);
+    }
+    
+    /**
+     * Add missing standard responses (304, 400, 404, 500) when explicit responses are provided
+     */
+    private void addMissingStandardResponses(ApiResponses responses, ApiEndpoint endpoint, 
+                                           DtoSchemaResolver schemaResolver, Map<String, Schema> dtoSchemas) {
+        String method = endpoint.getHttpMethod().toUpperCase();
+        String resource = extractResourceFromPath(endpoint.getPath());
+        
+        // Add 304 Not Modified for GET and PUT operations if not already present
+        if (("GET".equals(method) || "PUT".equals(method) || "PATCH".equals(method)) && 
+            !responses.containsKey("304")) {
+            
+            // For 304, try to reuse existing success response content
+            Content existingContent = null;
+            if (responses.containsKey("200")) {
+                existingContent = responses.get("200").getContent();
+            }
+            addResponseWithContent(responses, "304", "Not modified.", existingContent);
+        }
+        
+        // Add standard error responses if not already present
+        if (!responses.containsKey("400")) {
+            addErrorResponseWithJsonContent(responses, "400", "Bad request.", schemaResolver, dtoSchemas);
+        }
+        
+        if (endpoint.getPath().contains("{") && !responses.containsKey("404")) {
+            addErrorResponseWithJsonContent(responses, "404", resource + " not found.", schemaResolver, dtoSchemas);
+        }
+        
+        if (!responses.containsKey("500")) {
+            addErrorResponseWithJsonContent(responses, "500", "Server error.", schemaResolver, dtoSchemas);
+        }
+    }
+    
+    /**
+     * Recursively resolve nested DTO references within a schema.
+     * This ensures that all referenced DTOs are included in the components section.
+     */
+    private void resolveNestedDtoReferences(Schema<?> schema, DtoSchemaResolver schemaResolver, Map<String, Schema> dtoSchemas) {
+        if (schema == null || schema.getProperties() == null) {
+            return;
+        }
+        
+        for (Map.Entry<String, Schema> property : schema.getProperties().entrySet()) {
+            Schema propertySchema = property.getValue();
+            
+            // Handle direct DTO references
+            if (propertySchema.get$ref() != null) {
+                String ref = propertySchema.get$ref();
+                if (ref.startsWith("#/components/schemas/")) {
+                    String referencedClassName = ref.substring("#/components/schemas/".length());
+                    
+                    // Ensure the referenced DTO is resolved
+                    if (!dtoSchemas.containsKey(referencedClassName)) {
+                        Schema<?> referencedSchema = schemaResolver.resolveSchema(referencedClassName);
+                        if (referencedSchema != null) {
+                            dtoSchemas.put(referencedClassName, referencedSchema);
+                            // Recursively resolve nested references in the referenced schema
+                            resolveNestedDtoReferences(referencedSchema, schemaResolver, dtoSchemas);
+                        }
+                    }
+                }
+            }
+            
+            // Handle array items that might be DTO references
+            if ("array".equals(propertySchema.getType()) && propertySchema.getItems() != null) {
+                Schema itemsSchema = propertySchema.getItems();
+                if (itemsSchema.get$ref() != null) {
+                    String ref = itemsSchema.get$ref();
+                    if (ref.startsWith("#/components/schemas/")) {
+                        String referencedClassName = ref.substring("#/components/schemas/".length());
+                        
+                        // Ensure the referenced DTO is resolved
+                        if (!dtoSchemas.containsKey(referencedClassName)) {
+                            Schema<?> referencedSchema = schemaResolver.resolveSchema(referencedClassName);
+                            if (referencedSchema != null) {
+                                dtoSchemas.put(referencedClassName, referencedSchema);
+                                // Recursively resolve nested references in the referenced schema
+                                resolveNestedDtoReferences(referencedSchema, schemaResolver, dtoSchemas);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Recursively process nested object properties
+            if ("object".equals(propertySchema.getType())) {
+                resolveNestedDtoReferences(propertySchema, schemaResolver, dtoSchemas);
+            }
+        }
     }
 }

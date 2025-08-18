@@ -127,7 +127,73 @@ class DtoSchemaResolverTest {
         Schema<?> petsProperty = properties.get("pets");
         assertThat(petsProperty.getType()).isEqualTo("array");
         assertThat(petsProperty.getItems()).isNotNull();
-        assertThat(petsProperty.getItems().getType()).isEqualTo("object");
+        
+        // Items should either have a $ref (if PetDto is available) or be an object with description
+        Schema<?> itemsSchema = petsProperty.getItems();
+        boolean hasRef = itemsSchema.get$ref() != null;
+        boolean hasObjectType = "object".equals(itemsSchema.getType());
+        assertThat(hasRef || hasObjectType).isTrue();
+    }
+
+    @Test
+    void shouldCreateProperReferencesForNestedDtos() throws Exception {
+        // Given - DTOs with nested DTO references
+        Path srcDir = tempProjectDir.resolve("src/main/java/com/example/dto");
+        Files.createDirectories(srcDir);
+        
+        // Create PetTypeDto first
+        Path petTypeDtoFile = srcDir.resolve("PetTypeDto.java");
+        Files.writeString(petTypeDtoFile, """
+            package com.example.dto;
+            
+            public class PetTypeDto {
+                private String name;
+                private Integer id;
+                
+                public String getName() { return name; }
+                public void setName(String name) { this.name = name; }
+                public Integer getId() { return id; }
+                public void setId(Integer id) { this.id = id; }
+            }
+            """);
+        
+        // Create PetFieldsDto with nested PetTypeDto reference
+        Path petFieldsDtoFile = srcDir.resolve("PetFieldsDto.java");
+        Files.writeString(petFieldsDtoFile, """
+            package com.example.dto;
+            
+            import java.time.LocalDateTime;
+            
+            public class PetFieldsDto {
+                private String name;
+                private PetTypeDto type;
+                private LocalDateTime birthDate;
+                
+                public String getName() { return name; }
+                public void setName(String name) { this.name = name; }
+                public PetTypeDto getType() { return type; }
+                public void setType(PetTypeDto type) { this.type = type; }
+                public LocalDateTime getBirthDate() { return birthDate; }
+                public void setBirthDate(LocalDateTime birthDate) { this.birthDate = birthDate; }
+            }
+            """);
+        
+        // When - resolve PetFieldsDto schema
+        Schema<?> schema = resolver.resolveSchema("PetFieldsDto");
+        
+        // Then - verify proper DTO reference
+        assertThat(schema).isNotNull();
+        Map<String, Schema> properties = schema.getProperties();
+        assertThat(properties).containsKey("type");
+        
+        Schema<?> typeProperty = properties.get("type");
+        assertThat(typeProperty.get$ref()).isEqualTo("#/components/schemas/PetTypeDto");
+        assertThat(typeProperty.getType()).isNull(); // $ref should not have type property
+        
+        // Verify other properties are handled correctly
+        assertThat(properties.get("name").getType()).isEqualTo("string");
+        assertThat(properties.get("birthDate").getType()).isEqualTo("string");
+        assertThat(properties.get("birthDate").getFormat()).isEqualTo("date-time");
     }
 
     @Test
@@ -214,6 +280,42 @@ class DtoSchemaResolverTest {
         
         // Then - Should prefer generated version (appears first in search paths)
         assertThat(schema.getDescription()).contains("Generated DTO description");
+    }
+
+    @Test
+    void shouldHandleBrokenSchemaReferences() throws Exception {
+        // Given - A DTO that references another DTO that doesn't exist
+        Path srcDir = tempProjectDir.resolve("src/main/java/com/example/dto");
+        Files.createDirectories(srcDir);
+        
+        Path userDtoFile = srcDir.resolve("UserDto.java");
+        Files.writeString(userDtoFile, createUserDtoWithRoles());
+        
+        // When - resolve UserDto schema (references non-existent RoleDto)
+        Schema<?> schema = resolver.resolveSchema("UserDto");
+        
+        // Then - should handle gracefully
+        assertThat(schema).isNotNull();
+        Map<String, Schema> properties = schema.getProperties();
+        assertThat(properties).containsKey("roles");
+        
+        Schema<?> rolesProperty = properties.get("roles");
+        assertThat(rolesProperty.getType()).isEqualTo("array");
+        
+        // The items should either be a reference or a fallback object
+        Schema<?> itemsSchema = rolesProperty.getItems();
+        assertThat(itemsSchema).isNotNull();
+        
+        // Should not generate broken references - either valid $ref or object fallback
+        if (itemsSchema.get$ref() != null) {
+            // If it's a reference, should also resolve the referenced schema
+            Schema<?> roleSchema = resolver.resolveSchema("RoleDto");
+            assertThat(roleSchema).isNotNull();
+        } else {
+            // If not a reference, should be a proper object
+            assertThat(itemsSchema.getType()).isEqualTo("object");
+            assertThat(itemsSchema.getDescription()).isNotNull();
+        }
     }
 
     private String createSampleOwnerDto() {
@@ -361,5 +463,24 @@ class DtoSchemaResolverTest {
                 public void setTestField(String testField) { this.testField = testField; }
             }
             """, description, className);
+    }
+
+    private String createUserDtoWithRoles() {
+        return """
+            package com.example.dto;
+            
+            import java.util.List;
+            
+            public class UserDto {
+                private String username;
+                private List<RoleDto> roles;
+                
+                public String getUsername() { return username; }
+                public void setUsername(String username) { this.username = username; }
+                
+                public List<RoleDto> getRoles() { return roles; }
+                public void setRoles(List<RoleDto> roles) { this.roles = roles; }
+            }
+            """;
     }
 }

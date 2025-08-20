@@ -300,6 +300,19 @@ APISCAN's OpenAPI generation produces enterprise-grade specifications that close
 4. **Industry Standard Compliance**: Follows OpenAPI 3.0.3 best practices and conventions
 5. **Comprehensive Coverage**: Covers all major API documentation requirements out of the box
 
+## Debug Limitation Fix - All Endpoints Processing
+
+### Issue Resolved
+APISCAN was previously limited to processing only the first 100 endpoints during OpenAPI generation due to a debugging constraint that was accidentally left in production code. This caused many API endpoints (including Payment APIs) to be excluded from the generated OpenAPI specification.
+
+### Solution Implemented
+Removed the debugging limitation in `SwaggerCoreOpenApiGenerator.java` that was restricting endpoint processing to 100 endpoints. Now all discovered endpoints are properly included in the generated OpenAPI specification.
+
+### Impact
+**Shopizer E-commerce Platform**:
+- **Before Fix**: Only 100 endpoints included in OpenAPI file (Payment API missing)
+- **After Fix**: All 324 endpoints properly included (Payment API with 3 endpoints now present)
+
 ## Advanced Schema Generation Fixes
 
 ### @ApiIgnore Annotation Support

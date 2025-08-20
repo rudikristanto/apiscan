@@ -100,12 +100,7 @@ public class SwaggerCoreOpenApiGenerator {
                 System.out.println("[DEBUG] Processed " + processedEndpoints + " endpoints, latest took " + endpointTime + "ms");
             }
             
-            // Add timeout check - prevent hanging after 2 minutes  
-            // For debugging, limit to first 100 endpoints to include customer registration
-            if (processedEndpoints >= 100) {
-                System.out.println("[DEBUG] Limiting to first 100 endpoints for debugging");
-                break;
-            }
+            // Add timeout check - prevent hanging after 2 minutes
             if (System.currentTimeMillis() - startTime > 120000) {
                 System.out.println("[WARNING] OpenAPI generation taking too long, stopping after " + processedEndpoints + " endpoints");
                 break;

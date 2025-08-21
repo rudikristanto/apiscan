@@ -110,11 +110,20 @@ public class DtoSchemaResolver {
                 allMatches.add(currentModuleResult.get());
             }
             
-            // For multi-module projects, check parent directory and sibling modules
-            Path parentDir = Paths.get(projectPath).getParent();
-            if (parentDir != null && Files.exists(parentDir)) {
-                List<Path> multiModuleMatches = findAllMatchesInMultiModuleProject(parentDir, className);
-                allMatches.addAll(multiModuleMatches);
+            // For multi-module projects, check both current directory for sub-modules and parent directory for sibling modules
+            Path currentDir = Paths.get(projectPath);
+            
+            // First, check current directory for sub-modules (handles parent directory with multiple modules)
+            if (Files.exists(currentDir)) {
+                List<Path> subModuleMatches = findAllMatchesInMultiModuleProject(currentDir, className);
+                allMatches.addAll(subModuleMatches);
+            }
+            
+            // Then, check parent directory for sibling modules (handles single module with siblings)
+            Path parentDir = currentDir.getParent();
+            if (parentDir != null && Files.exists(parentDir) && !parentDir.equals(currentDir)) {
+                List<Path> siblingModuleMatches = findAllMatchesInMultiModuleProject(parentDir, className);
+                allMatches.addAll(siblingModuleMatches);
             }
             
             if (allMatches.isEmpty()) {

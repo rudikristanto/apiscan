@@ -313,6 +313,67 @@ Removed the debugging limitation in `SwaggerCoreOpenApiGenerator.java` that was 
 - **Before Fix**: Only 100 endpoints included in OpenAPI file (Payment API missing)
 - **After Fix**: All 324 endpoints properly included (Payment API with 3 endpoints now present)
 
+## Multi-Module DTO Schema Resolution Fix
+
+### Issue: Parent Directory Multi-Module Project DTO Discovery
+APISCAN was failing to resolve DTO schemas when scanning parent directory projects (e.g., scanning `C:\path\to\shopizer` containing multiple modules like `sm-shop-model`, `sm-core-model`, etc.). The `DtoSchemaResolver.findDtoFile()` method was incorrectly searching for modules in the parent directory instead of within the current project directory.
+
+### Root Cause
+The original logic in `DtoSchemaResolver.findDtoFile()` was:
+```java
+// INCORRECT: Searching in parent directory for sibling modules
+Path parentDir = Paths.get(projectPath).getParent();
+List<Path> multiModuleMatches = findAllMatchesInMultiModuleProject(parentDir, className);
+```
+
+When `projectPath = "C:\Users\User\prj\shopizer"`, this would search in `"C:\Users\User\prj"` for modules, but the actual modules (`sm-shop-model`, `sm-core-model`) are **within** the shopizer directory.
+
+### Solution Implemented
+Enhanced multi-module search to support both scenarios:
+
+1. **Parent Directory Scanning** (new): For projects like `shopizer/` containing multiple modules as subdirectories
+2. **Sibling Module Scanning** (existing): For single modules with sibling modules in the same parent directory
+
+```java
+// FIXED: Search both current directory for sub-modules AND parent directory for sibling modules
+Path currentDir = Paths.get(projectPath);
+
+// First, check current directory for sub-modules (handles parent directory with multiple modules)
+if (Files.exists(currentDir)) {
+    List<Path> subModuleMatches = findAllMatchesInMultiModuleProject(currentDir, className);
+    allMatches.addAll(subModuleMatches);
+}
+
+// Then, check parent directory for sibling modules (handles single module with siblings)
+Path parentDir = currentDir.getParent();
+if (parentDir != null && Files.exists(parentDir) && !parentDir.equals(currentDir)) {
+    List<Path> siblingModuleMatches = findAllMatchesInMultiModuleProject(parentDir, className);
+    allMatches.addAll(siblingModuleMatches);
+}
+```
+
+### Real-World Impact
+**Shopizer E-commerce Platform Results**:
+- **Before Fix**: `PersistableCustomer` schema had `_schemaPlaceholder` (DTO file not found)
+- **After Fix**: `PersistableCustomer` schema resolved with 17 actual properties:
+  - `emailAddress`, `password`, `firstName`, `lastName`
+  - `billing` and `delivery` addresses (complex nested objects)
+  - `groups` array of `PersistableGroup` objects
+  - `attributes` array of `PersistableCustomerAttribute` objects
+  - Required field validation for `emailAddress`
+  - Proper `$ref` schema references to nested DTOs
+
+### Test Coverage
+- **ParentDirectoryMultiModuleTest**: Comprehensive test suite for the new parent directory sub-module scanning fix
+  - Tests resolving DTOs from sub-modules when scanning parent directory  
+  - Verifies prioritization logic works across sub-modules
+  - Ensures no placeholder schemas when DTOs exist in sub-modules
+  - Tests graceful handling of empty parent directories
+- **MultiModuleDtoResolverTest**: Existing sibling module resolution continues to work (backward compatibility)
+- **DtoSchemaResolverMissingTest**: Cross-module DTO resolution in Shopizer project structure
+
+The fix maintains backward compatibility while adding support for parent directory multi-module projects, ensuring enterprise-grade DTO schema resolution across complex Maven project structures.
+
 ## Advanced Schema Generation Fixes
 
 ### @ApiIgnore Annotation Support

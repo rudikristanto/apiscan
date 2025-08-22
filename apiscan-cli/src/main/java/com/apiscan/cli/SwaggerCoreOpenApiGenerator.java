@@ -15,6 +15,7 @@ import io.swagger.v3.oas.models.PathItem;
 import io.swagger.v3.oas.models.Paths;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.media.Content;
+import io.swagger.v3.oas.models.media.Encoding;
 import io.swagger.v3.oas.models.media.MediaType;
 import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.parameters.Parameter;
@@ -323,6 +324,15 @@ public class SwaggerCoreOpenApiGenerator {
             operation.requestBody(buildRequestBody(endpoint.getRequestBody(), schemaResolver, dtoSchemas));
         }
         
+        // Check for file upload parameters (formData) and create multipart request body
+        List<ApiEndpoint.Parameter> fileParams = endpoint.getParameters().stream()
+            .filter(p -> "formData".equals(p.getIn()))
+            .collect(Collectors.toList());
+        
+        if (!fileParams.isEmpty() && supportsRequestBody(endpoint.getHttpMethod())) {
+            operation.requestBody(buildMultipartRequestBody(fileParams, endpoint.getRequestBody()));
+        }
+        
         // Set responses - include multiple status codes
         ApiResponses responses = new ApiResponses();
         if (endpoint.getResponses().isEmpty()) {
@@ -372,6 +382,10 @@ public class SwaggerCoreOpenApiGenerator {
                 case "header":
                     parameter = new HeaderParameter();
                     break;
+                case "formData":
+                    // File upload parameters should not be regular parameters
+                    // They should be part of the request body
+                    return null;
                 case "query":
                 default:
                     parameter = new QueryParameter();
@@ -464,6 +478,65 @@ public class SwaggerCoreOpenApiGenerator {
             mediaType.schema(schema);
             content.addMediaType(entry.getKey(), mediaType);
         }
+        requestBody.content(content);
+        
+        return requestBody;
+    }
+    
+    private io.swagger.v3.oas.models.parameters.RequestBody buildMultipartRequestBody(
+            List<ApiEndpoint.Parameter> fileParams, 
+            ApiEndpoint.RequestBody existingRequestBody) {
+        
+        io.swagger.v3.oas.models.parameters.RequestBody requestBody = new io.swagger.v3.oas.models.parameters.RequestBody();
+        requestBody.description("Multipart form data");
+        requestBody.required(fileParams.stream().anyMatch(ApiEndpoint.Parameter::isRequired));
+        
+        Content content = new Content();
+        MediaType mediaType = new MediaType();
+        
+        // Create schema for multipart/form-data
+        Schema<Object> schema = new Schema<>();
+        schema.type("object");
+        
+        // Create encoding map for file upload parameters
+        Map<String, Encoding> encodingMap = new HashMap<>();
+        
+        // Add file upload properties
+        for (ApiEndpoint.Parameter fileParam : fileParams) {
+            Schema<Object> fileSchema = new Schema<>();
+            
+            if (fileParam.getType().contains("[]")) {
+                // Array of files
+                Schema<Object> itemSchema = new Schema<>();
+                itemSchema.type("string");
+                itemSchema.format("binary");
+                
+                fileSchema.type("array");
+                fileSchema.items(itemSchema);
+            } else {
+                // Single file
+                fileSchema.type("string");
+                fileSchema.format("binary");
+            }
+            
+            schema.addProperty(fileParam.getName(), fileSchema);
+            
+            if (fileParam.isRequired()) {
+                schema.addRequiredItem(fileParam.getName());
+            }
+            
+            // Add encoding information for better Swagger UI rendering
+            Encoding encoding = new Encoding();
+            encoding.contentType("application/octet-stream");
+            encodingMap.put(fileParam.getName(), encoding);
+        }
+        
+        mediaType.schema(schema);
+        // Add encoding information to help Swagger UI render file upload controls properly
+        if (!encodingMap.isEmpty()) {
+            mediaType.encoding(encodingMap);
+        }
+        content.addMediaType("multipart/form-data", mediaType);
         requestBody.content(content);
         
         return requestBody;

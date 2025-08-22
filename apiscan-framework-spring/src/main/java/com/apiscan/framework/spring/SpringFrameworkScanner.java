@@ -710,9 +710,17 @@ public class SpringFrameworkScanner implements FrameworkScanner {
             .findFirst();
         
         if (requestParam.isPresent()) {
-            apiParam.setIn("query");
-            extractRequestParamDetails(requestParam.get(), apiParam);
-            return Optional.of(apiParam);
+            // Check if this is a file upload parameter (MultipartFile)
+            if (isMultipartFileType(param.getTypeAsString())) {
+                apiParam.setIn("formData");
+                // Keep the original type (MultipartFile, MultipartFile[], etc.)
+                extractRequestParamDetails(requestParam.get(), apiParam);
+                return Optional.of(apiParam);
+            } else {
+                apiParam.setIn("query");
+                extractRequestParamDetails(requestParam.get(), apiParam);
+                return Optional.of(apiParam);
+            }
         }
         
         Optional<AnnotationExpr> requestHeader = param.getAnnotations().stream()
@@ -902,6 +910,15 @@ public class SpringFrameworkScanner implements FrameworkScanner {
                type.contains("java.security.") ||
                type.contains("javax.servlet.") ||
                type.contains("org.springframework.security.");
+    }
+    
+    private boolean isMultipartFileType(String type) {
+        // Check for MultipartFile types used in file uploads
+        return type.equals("MultipartFile") ||
+               type.equals("org.springframework.web.multipart.MultipartFile") ||
+               type.equals("MultipartFile[]") ||
+               type.equals("org.springframework.web.multipart.MultipartFile[]") ||
+               type.contains("MultipartFile");
     }
     
     private void extractResponseType(MethodDeclaration method, ApiEndpoint endpoint) {

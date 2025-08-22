@@ -637,3 +637,88 @@ if (!pathParamNames.isEmpty() && !isPathParameter &&
 2. **Enhanced Developer Experience**: API consumers can see all available query parameters
 3. **Improved Tool Compatibility**: Generated specs work correctly with Swagger UI, Postman, and code generators
 4. **Enterprise Compliance**: Meets enterprise API documentation standards for comprehensive parameter coverage
+
+## File Upload Support in OpenAPI Generation
+
+### Issue Resolved: Missing MultipartFile Request Body Generation
+APISCAN was incorrectly representing `@RequestParam MultipartFile` parameters as query parameters instead of generating proper `multipart/form-data` request bodies for file uploads, causing OpenAPI viewers to not render file upload controls correctly.
+
+#### Root Cause
+The `SpringFrameworkScanner.extractParameter()` method treated all `@RequestParam` parameters as query parameters regardless of their type. File upload parameters (`MultipartFile`) require special handling in OpenAPI 3.0 as `multipart/form-data` request bodies, not query parameters.
+
+#### Solution Implemented
+Enhanced file upload parameter detection and OpenAPI generation:
+
+1. **MultipartFile Detection**: Added `isMultipartFileType()` method to identify file upload parameters
+2. **Form Data Classification**: File upload parameters are marked with `in="formData"` for special processing
+3. **Multipart Request Body Generation**: Created `buildMultipartRequestBody()` method to generate proper `multipart/form-data` request bodies
+4. **Mixed Parameter Support**: Endpoints with both file uploads and regular parameters are handled correctly
+
+#### Real-World Impact
+**Shopizer E-commerce Platform File Upload Endpoints**:
+- **Before**: `POST /api/v1/private/file` showed `file` as query parameter
+- **After**: Proper `multipart/form-data` request body with `type: string, format: binary`
+
+**Multiple File Upload Support**:
+- **Before**: `POST /api/v1/private/files` showed `file[]` as query parameter  
+- **After**: Array of binary files in `multipart/form-data` request body
+
+#### Technical Implementation
+**Enhanced SpringFrameworkScanner**:
+- `isMultipartFileType()`: Detects `MultipartFile`, `MultipartFile[]`, and fully qualified types
+- Form data parameter classification with preserved original types
+
+**Enhanced SwaggerCoreOpenApiGenerator**:
+- `buildMultipartRequestBody()`: Creates OpenAPI 3.0 compliant multipart request bodies
+- File parameter filtering from regular parameter arrays
+- Support for both single files (`type: string, format: binary`) and file arrays
+
+#### OpenAPI 3.0 Compliance
+Generated file upload endpoints now include:
+- `requestBody` with `multipart/form-data` content type
+- `schema` with `type: object` containing file properties
+- File properties with `type: string, format: binary` (single files) or arrays of binary strings (multiple files)
+- Proper `required` field arrays for mandatory file parameters
+
+#### Test Coverage
+- **FileUploadParameterTest**: Validates MultipartFile parameter extraction in SpringFrameworkScanner
+- **FileUploadOpenApiTest**: Verifies correct OpenAPI generation for file upload endpoints
+- **Mixed Parameter Scenarios**: Tests endpoints combining path, query, and file parameters
+
+#### Benefits
+1. **Proper File Upload UI**: OpenAPI viewers (Swagger UI, Postman) now render file upload controls
+2. **Enterprise File Management**: Supports complex file upload scenarios common in e-commerce platforms
+3. **OpenAPI 3.0 Compliance**: Generated specifications pass validation in enterprise tools
+4. **Developer Experience**: Clear documentation of file upload capabilities in API specifications
+
+### Enhanced File Upload Rendering with Encoding Information
+
+#### Issue Resolved: Improved Swagger UI File Upload Controls
+While the multipart/form-data structure was correctly generated, OpenAPI viewers were still showing generic text inputs instead of proper file upload controls due to missing encoding information.
+
+#### Solution Implemented
+Enhanced `buildMultipartRequestBody()` method to include encoding information:
+
+```java
+// Create encoding map for file upload parameters
+Map<String, Encoding> encodingMap = new HashMap<>();
+Encoding encoding = new Encoding();
+encoding.contentType("application/octet-stream");
+encodingMap.put(fileParam.getName(), encoding);
+multipartContent.encoding(encodingMap);
+```
+
+#### Real-World Impact
+**File Upload Control Rendering**:
+- **Before**: Text input with `string($binary)` label in Swagger UI
+- **After**: Proper file upload button control for better user experience
+
+#### Technical Enhancement
+- **Encoding Information**: Added `application/octet-stream` contentType for all file parameters
+- **Tool Compatibility**: Improved rendering in Swagger UI, ReDoc, and other OpenAPI viewers
+- **Enhanced Test Coverage**: Added comprehensive verification in `FileUploadOpenApiTest.testSwaggerUIFileUploadRendering()`
+
+#### Benefits
+1. **Professional File Upload UI**: File upload controls render correctly in all major OpenAPI viewers
+2. **Enhanced Developer Experience**: Clear visual distinction between file uploads and text inputs
+3. **Enterprise Tool Integration**: Improved compatibility with API documentation and testing tools

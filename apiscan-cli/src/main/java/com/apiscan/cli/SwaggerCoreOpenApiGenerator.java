@@ -355,8 +355,9 @@ public class SwaggerCoreOpenApiGenerator {
         // These will be handled by the missing path parameter logic
         Set<String> pathParamNames = extractPathParameterNames(normalizedPath);
         if (!pathParamNames.isEmpty() && !isPathParameter && 
-            (param.getIn() == null || param.getIn().equals("query"))) {
-            // This might be a misnamed path parameter - skip it
+            (param.getIn() == null) && pathParamNames.contains(paramName)) {
+            // This parameter name matches a path parameter but has no explicit "in" type
+            // It might be a misnamed path parameter - skip it
             // We'll create the correct one from the path
             return null;
         }

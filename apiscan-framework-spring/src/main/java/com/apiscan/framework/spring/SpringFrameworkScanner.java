@@ -807,19 +807,13 @@ public class SpringFrameworkScanner implements FrameworkScanner {
              httpMethod.equalsIgnoreCase("PUT") || 
              httpMethod.equalsIgnoreCase("PATCH"));
         
+        // First pass: look for parameters with explicit @RequestBody annotation
         for (Parameter param : method.getParameters()) {
-            boolean isRequestBody = param.getAnnotations().stream()
+            boolean hasRequestBodyAnnotation = param.getAnnotations().stream()
                 .anyMatch(ann -> ann.getNameAsString().equals("RequestBody"));
             
-            String paramType = param.getTypeAsString();
-            
-            // Check if this is a request body parameter:
-            // 1. Has @RequestBody annotation, OR
-            // 2. For POST/PUT/PATCH methods without annotations, check if it's a DTO/complex type
-            boolean shouldBeRequestBody = isRequestBody || 
-                (isModifyingMethod && !isSimpleType(paramType) && !hasPathOrQueryAnnotation(param) && isDtoType(paramType));
-            
-            if (shouldBeRequestBody) {
+            if (hasRequestBodyAnnotation) {
+                String paramType = param.getTypeAsString();
                 ApiEndpoint.RequestBody body = new ApiEndpoint.RequestBody();
                 body.setRequired(true);
                 
@@ -831,7 +825,40 @@ public class SpringFrameworkScanner implements FrameworkScanner {
                 
                 // Default consumes
                 endpoint.getConsumes().add("application/json");
-                break;
+                return; // Found explicit @RequestBody, we're done
+            }
+        }
+        
+        // Second pass: if no explicit @RequestBody found, try to infer for POST/PUT/PATCH
+        if (isModifyingMethod) {
+            for (Parameter param : method.getParameters()) {
+                String paramType = param.getTypeAsString();
+                
+                // Skip if it has other Spring annotations (path, query, header)
+                if (hasPathOrQueryAnnotation(param)) {
+                    continue;
+                }
+                
+                // Skip framework types that shouldn't be request bodies
+                if (isFrameworkType(paramType)) {
+                    continue;
+                }
+                
+                // Check if it's a DTO/complex type that could be a request body
+                if (!isSimpleType(paramType) && isDtoType(paramType)) {
+                    ApiEndpoint.RequestBody body = new ApiEndpoint.RequestBody();
+                    body.setRequired(true);
+                    
+                    ApiEndpoint.MediaType mediaType = new ApiEndpoint.MediaType();
+                    mediaType.setSchema(paramType);
+                    
+                    body.getContent().put("application/json", mediaType);
+                    endpoint.setRequestBody(body);
+                    
+                    // Default consumes
+                    endpoint.getConsumes().add("application/json");
+                    break; // Use the first suitable DTO type
+                }
             }
         }
     }
@@ -854,7 +881,27 @@ public class SpringFrameworkScanner implements FrameworkScanner {
                type.endsWith("Input") ||
                type.endsWith("Output") ||
                type.endsWith("Payload") ||
-               (!isSimpleType(type) && !type.startsWith("java."));
+               type.endsWith("Entity") ||
+               type.contains("Recipient") || // Specific for piggymetrics
+               type.contains("Account") ||   // Common domain objects
+               type.contains("User") ||
+               type.contains("Product") ||
+               type.contains("Order") ||
+               (!isSimpleType(type) && !type.startsWith("java.") && !isFrameworkType(type));
+    }
+    
+    private boolean isFrameworkType(String type) {
+        // Common Spring/Java framework types that shouldn't be request bodies
+        return type.equals("Principal") ||
+               type.equals("HttpServletRequest") ||
+               type.equals("HttpServletResponse") ||
+               type.equals("HttpSession") ||
+               type.equals("Locale") ||
+               type.equals("Authentication") ||
+               type.equals("SecurityContext") ||
+               type.contains("java.security.") ||
+               type.contains("javax.servlet.") ||
+               type.contains("org.springframework.security.");
     }
     
     private void extractResponseType(MethodDeclaration method, ApiEndpoint endpoint) {

@@ -104,14 +104,28 @@ class SwaggerCoreOpenApiGeneratorTest {
         JsonNode putOperation = vetPath.get("put");
         JsonNode parameters = putOperation.get("parameters");
         assertThat(parameters.isArray()).isTrue();
-        assertThat(parameters).hasSize(1);
+        assertThat(parameters).hasSize(2); // Should have vetId query param + id path param
         
-        JsonNode idParam = parameters.get(0);
-        // CRITICAL: Parameter name must exactly match path segment for OpenAPI validation
-        assertThat(idParam.get("name").asText()).isEqualTo("id"); // Not "vetId"!
-        assertThat(idParam.get("in").asText()).isEqualTo("path");
-        assertThat(idParam.get("required").asBoolean()).isTrue();
-        assertThat(idParam.get("schema").get("type").asText()).isEqualTo("string"); // Default type for generated path params
+        // Check that we have both the vetId query parameter and the id path parameter
+        boolean hasVetIdQuery = false;
+        boolean hasIdPath = false;
+        
+        for (JsonNode param : parameters) {
+            String name = param.get("name").asText();
+            String in = param.get("in").asText();
+            
+            if ("vetId".equals(name) && "query".equals(in)) {
+                hasVetIdQuery = true;
+                assertThat(param.get("required").asBoolean()).isFalse();
+            } else if ("id".equals(name) && "path".equals(in)) {
+                hasIdPath = true;
+                assertThat(param.get("required").asBoolean()).isTrue();
+                assertThat(param.get("schema").get("type").asText()).isEqualTo("string"); // Default type for generated path params
+            }
+        }
+        
+        assertThat(hasVetIdQuery).isTrue(); // vetId should be preserved as query parameter
+        assertThat(hasIdPath).isTrue(); // id should be auto-generated as path parameter
     }
 
     @Test

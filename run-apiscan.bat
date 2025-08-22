@@ -3,6 +3,7 @@ REM APISCAN Runner - Scans API projects and generates OpenAPI documentation
 REM Usage: run-apiscan.bat [--skip-build] <project-path>
 REM Example: run-apiscan.bat "C:\Users\Rudi Kristanto\prj\spring-petclinic-rest"
 REM Example: run-apiscan.bat --skip-build "C:\Users\Rudi Kristanto\prj\shopizer"
+REM Example: run-apiscan.bat --skip-build "C:\Users\Rudi Kristanto\inp\piggymetrics"
 
 setlocal enabledelayedexpansion
 

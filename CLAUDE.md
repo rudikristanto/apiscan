@@ -570,3 +570,70 @@ shopizer/
 - Successfully prioritized **20+ different class conflicts** in Shopizer
 - Automatic selection of DTO-appropriate versions across Categories, Products, Customers, and Attributes
 - Maintained backward compatibility with single-module projects
+
+## Multi-Module Microservices Support
+
+### Enhanced DTO Resolution for Microservices
+APISCAN now properly handles complex multi-module microservice architectures with improved DTO resolution:
+- **Service Module Recognition**: Detects Maven modules with names containing "service" or "core"
+- **Domain Model Support**: Recognizes domain models in microservice patterns (e.g., `notification.domain`, `account.domain`)
+- **Package Prioritization**: Properly prioritizes DTOs in domain packages for microservices over JPA entities
+
+### Request Body Detection with Multiple Parameters
+Fixed critical issue where methods with multiple parameters (including framework types like `Principal`) incorrectly selected the wrong parameter as request body.
+
+#### Solution
+- **Explicit @RequestBody Priority**: Parameters with explicit `@RequestBody` annotation always take precedence
+- **Framework Type Filtering**: Common framework types (`Principal`, `HttpServletRequest`, `Authentication`, etc.) are excluded from request body inference
+- **Smart DTO Detection**: Enhanced DTO type detection includes common domain objects (`Recipient`, `Account`, `User`, etc.)
+
+#### Real-World Impact
+**PiggyMetrics Microservices Platform**:
+- **Before**: PUT `/recipients/current` incorrectly showed `_schemaPlaceholder` or `Principal` as request body
+- **After**: Correctly identifies `Recipient` class as request body with proper schema resolution (3 properties: accountName, email, scheduledNotifications)
+
+## Query Parameter Support in OpenAPI Generation
+
+### Issue Resolved: Missing @RequestParam Query Parameters
+APISCAN was incorrectly filtering out legitimate `@RequestParam` query parameters when endpoints also contained path parameters, causing incomplete OpenAPI specifications.
+
+#### Root Cause
+The `SwaggerCoreOpenApiGenerator.buildParameter()` method had overly aggressive filtering logic that incorrectly assumed any query parameter in an endpoint with path parameters might be a "misnamed path parameter" and filtered them out.
+
+#### Solution Implemented
+Enhanced parameter filtering logic in `SwaggerCoreOpenApiGenerator.java` to:
+- **Preserve Explicit Query Parameters**: Parameters explicitly marked with `in="query"` are never filtered out
+- **Improved Filtering Logic**: Only filter parameters with `in=null` that match path parameter names exactly
+- **Maintain Path Parameter Generation**: Continue auto-generating missing path parameters from URL patterns
+
+#### Real-World Impact
+**Shopizer E-commerce Platform**:
+- **Before**: GET `/api/v1/private/orders/customers/{id}` only showed path parameter `id`
+- **After**: Correctly includes path parameter `id` AND query parameters `start` and `count`
+
+#### Technical Details
+**Fixed Logic**:
+```java
+// OLD: Incorrectly filtered out ALL query parameters when path parameters existed
+if (!pathParamNames.isEmpty() && !isPathParameter && 
+    (param.getIn() == null || param.getIn().equals("query"))) {
+    return null; // WRONG: Filtered out legitimate query parameters
+}
+
+// NEW: Only filter parameters with no explicit type that match path parameter names
+if (!pathParamNames.isEmpty() && !isPathParameter && 
+    (param.getIn() == null) && pathParamNames.contains(paramName)) {
+    return null; // CORRECT: Only filter likely misnamed path parameters
+}
+```
+
+#### Test Coverage
+- **QueryParameterExtractionTest**: Validates SpringFrameworkScanner correctly extracts @RequestParam annotations
+- **QueryParameterGenerationTest**: Verifies OpenAPI generator includes query parameters in specifications
+- **ShopizerOrdersEndpointTest**: Tests the exact scenario reported by the user
+
+#### Benefits
+1. **Complete API Documentation**: OpenAPI specifications now include all endpoint parameters
+2. **Enhanced Developer Experience**: API consumers can see all available query parameters
+3. **Improved Tool Compatibility**: Generated specs work correctly with Swagger UI, Postman, and code generators
+4. **Enterprise Compliance**: Meets enterprise API documentation standards for comprehensive parameter coverage

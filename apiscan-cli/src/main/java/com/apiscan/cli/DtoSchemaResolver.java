@@ -261,7 +261,9 @@ public class DtoSchemaResolver {
                dir.getFileName().toString().contains("model") ||
                dir.getFileName().toString().contains("api") ||
                dir.getFileName().toString().contains("dto") ||
-               dir.getFileName().toString().contains("entity");
+               dir.getFileName().toString().contains("entity") ||
+               dir.getFileName().toString().contains("service") ||
+               dir.getFileName().toString().contains("core");
     }
     
     /**
@@ -323,12 +325,17 @@ public class DtoSchemaResolver {
             "generated",            // Generated DTOs
             "openapi",
             
+            // Domain model packages (medium priority - can be DTOs in microservices)
+            "notification.domain",  // Microservice domain models
+            "account.domain",       // Microservice domain models
+            "statistics.domain",    // Microservice domain models
+            ".domain",              // General domain models (may be DTOs)
+            
             // JPA/Core entity packages (lower priority)
             "sm-core-model",        // Shopizer JPA entity module (lower priority)
             "core.model",           // Shopizer JPA entity layer  
             "entity",
             "entities",
-            "domain",
             "persistence"
         );
         

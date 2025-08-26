@@ -9,6 +9,8 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +34,9 @@ public class SpringFrameworkScanner implements FrameworkScanner {
         "RestController", "Controller"
     );
     
+    // Map to store constant values found during scanning
+    private Map<String, String> constantsMap = new HashMap<>();
+    
     @Override
     public ScanResult scan(Path projectPath) {
         logger.info("Starting Spring framework scan for project: {}", projectPath);
@@ -46,7 +51,10 @@ public class SpringFrameworkScanner implements FrameworkScanner {
         List<Path> javaFiles = findJavaFiles(projectPath);
         result.setFilesScanned(javaFiles.size());
         
-        // First pass: collect all interfaces with their API definitions
+        // First pass: collect all constants from the project
+        collectConstants(javaFiles, parser);
+        
+        // Second pass: collect all interfaces with their API definitions
         Map<String, ClassOrInterfaceDeclaration> apiInterfaces = new HashMap<>();
         for (Path javaFile : javaFiles) {
             try {
@@ -762,7 +770,8 @@ public class SpringFrameworkScanner implements FrameworkScanner {
     private void extractParameterName(AnnotationExpr annotation, ApiEndpoint.Parameter param) {
         if (annotation instanceof SingleMemberAnnotationExpr) {
             SingleMemberAnnotationExpr singleAnn = (SingleMemberAnnotationExpr) annotation;
-            String value = cleanPath(singleAnn.getMemberValue().toString());
+            String value = resolveAnnotationValue(singleAnn.getMemberValue());
+            value = cleanPath(value);
             if (!value.isEmpty()) {
                 param.setName(value);
             }
@@ -773,7 +782,8 @@ public class SpringFrameworkScanner implements FrameworkScanner {
                               pair.getNameAsString().equals("name"))
                 .findFirst()
                 .ifPresent(pair -> {
-                    String value = cleanPath(pair.getValue().toString());
+                    String value = resolveAnnotationValue(pair.getValue());
+                    value = cleanPath(value);
                     if (!value.isEmpty()) {
                         param.setName(value);
                     }
@@ -954,15 +964,93 @@ public class SpringFrameworkScanner implements FrameworkScanner {
         endpoint.getResponses().put("200", response);
     }
     
+    private void collectConstants(List<Path> javaFiles, JavaSourceParser parser) {
+        for (Path javaFile : javaFiles) {
+            try {
+                Optional<CompilationUnit> cuOpt = parser.parseFile(javaFile);
+                if (!cuOpt.isPresent()) continue;
+                CompilationUnit cu = cuOpt.get();
+                if (cu == null) continue;
+                
+                // Find all field declarations with static final modifiers
+                cu.findAll(FieldDeclaration.class).stream()
+                    .filter(field -> field.isStatic() && field.isFinal())
+                    .forEach(field -> {
+                        field.getVariables().forEach(var -> {
+                            String fieldName = var.getNameAsString();
+                            var.getInitializer().ifPresent(init -> {
+                                if (init instanceof StringLiteralExpr) {
+                                    StringLiteralExpr strLit = (StringLiteralExpr) init;
+                                    String value = strLit.getValue();
+                                    
+                                    // Store with full class name if available
+                                    cu.findFirst(ClassOrInterfaceDeclaration.class).ifPresent(cls -> {
+                                        String className = cls.getNameAsString();
+                                        constantsMap.put(className + "." + fieldName, value);
+                                        // Also store with just field name for simpler references
+                                        constantsMap.put(fieldName, value);
+                                    });
+                                }
+                            });
+                        });
+                    });
+            } catch (Exception e) {
+                logger.debug("Could not parse file for constants: {}", javaFile, e);
+            }
+        }
+        logger.info("Collected {} constant values from project", constantsMap.size());
+    }
+    
+    private String resolveAnnotationValue(Expression expr) {
+        // If it's already a string literal, return its value
+        if (expr instanceof StringLiteralExpr) {
+            return ((StringLiteralExpr) expr).getValue();
+        }
+        
+        // If it's a field access expression (e.g., Constants.ACCEPT)
+        if (expr instanceof FieldAccessExpr) {
+            FieldAccessExpr fieldAccess = (FieldAccessExpr) expr;
+            String fieldName = fieldAccess.getNameAsString();
+            String scopeStr = fieldAccess.getScope().toString();
+            
+            // Try to resolve the constant value
+            String fullName = scopeStr + "." + fieldName;
+            if (constantsMap.containsKey(fullName)) {
+                return constantsMap.get(fullName);
+            }
+            // Fallback to just field name
+            if (constantsMap.containsKey(fieldName)) {
+                return constantsMap.get(fieldName);
+            }
+        }
+        
+        // If it's a name expression (e.g., just ACCEPT without class qualifier)
+        if (expr instanceof NameExpr) {
+            String name = ((NameExpr) expr).getNameAsString();
+            if (constantsMap.containsKey(name)) {
+                return constantsMap.get(name);
+            }
+        }
+        
+        // If we can't resolve it, return the original string representation
+        return expr.toString();
+    }
+    
     private List<Path> findJavaFiles(Path projectPath) {
         List<Path> javaFiles = new ArrayList<>();
         
-        // Check if this is a multi-module parent directory
+        // Check if this is a multi-module parent directory (with parent pom.xml)
         if (isMultiModuleProject(projectPath)) {
             logger.info("Detected multi-module project, scanning all modules for Java files");
             javaFiles.addAll(findJavaFilesInMultiModuleProject(projectPath));
-        } else {
-            // Single module project
+        } 
+        // Check if this is an independent microservices project (multiple services without parent pom)
+        else if (isIndependentMicroservices(projectPath)) {
+            logger.info("Detected independent microservices, scanning all services for Java files");
+            javaFiles.addAll(findJavaFilesInIndependentMicroservices(projectPath));
+        }
+        // Single module project
+        else {
             javaFiles.addAll(findJavaFilesInSingleModule(projectPath));
         }
         
@@ -987,6 +1075,37 @@ public class SpringFrameworkScanner implements FrameworkScanner {
         }
     }
     
+    private boolean isIndependentMicroservices(Path projectPath) {
+        // Check if this directory has multiple subdirectories with build files but no parent build file
+        Path parentPom = projectPath.resolve("pom.xml");
+        Path parentGradle = projectPath.resolve("build.gradle");
+        Path parentGradleKts = projectPath.resolve("build.gradle.kts");
+        
+        // If there's a parent build file, it's not independent microservices
+        if (Files.exists(parentPom) || Files.exists(parentGradle) || Files.exists(parentGradleKts)) {
+            return false;
+        }
+        
+        try (Stream<Path> paths = Files.list(projectPath)) {
+            List<Path> serviceDirectories = paths
+                .filter(Files::isDirectory)
+                .filter(this::hasBuildFile)
+                .collect(Collectors.toList());
+            
+            // Consider it microservices if there are at least 2 service directories
+            return serviceDirectories.size() >= 2;
+        } catch (IOException e) {
+            logger.debug("Error checking for independent microservices: {}", e.getMessage());
+            return false;
+        }
+    }
+    
+    private boolean hasBuildFile(Path directory) {
+        return Files.exists(directory.resolve("pom.xml")) ||
+               Files.exists(directory.resolve("build.gradle")) ||
+               Files.exists(directory.resolve("build.gradle.kts"));
+    }
+    
     private List<Path> findJavaFilesInMultiModuleProject(Path parentPath) {
         List<Path> allJavaFiles = new ArrayList<>();
         
@@ -1009,6 +1128,33 @@ public class SpringFrameworkScanner implements FrameworkScanner {
             
         } catch (IOException e) {
             logger.error("Error scanning multi-module project: {}", e.getMessage());
+        }
+        
+        return allJavaFiles;
+    }
+    
+    private List<Path> findJavaFilesInIndependentMicroservices(Path parentPath) {
+        List<Path> allJavaFiles = new ArrayList<>();
+        
+        try (Stream<Path> serviceStream = Files.list(parentPath)) {
+            List<Path> services = serviceStream
+                .filter(Files::isDirectory)
+                .filter(this::hasBuildFile)
+                .collect(Collectors.toList());
+            
+            logger.info("Found {} independent microservices", services.size());
+            
+            for (Path service : services) {
+                String serviceName = service.getFileName().toString();
+                logger.debug("Scanning microservice: {}", serviceName);
+                
+                List<Path> serviceJavaFiles = findJavaFilesInSingleModule(service);
+                allJavaFiles.addAll(serviceJavaFiles);
+                logger.debug("Found {} Java files in microservice {}", serviceJavaFiles.size(), serviceName);
+            }
+            
+        } catch (IOException e) {
+            logger.error("Error scanning independent microservices: {}", e.getMessage());
         }
         
         return allJavaFiles;

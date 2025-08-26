@@ -483,4 +483,60 @@ class DtoSchemaResolverTest {
             }
             """;
     }
+
+    @Test
+    void shouldResolveSchemaFromLombokDto() throws Exception {
+        // Given - Create a Lombok DTO file (like AccountDto)
+        Path srcDir = tempProjectDir.resolve("src/main/java/com/example/dto");
+        Files.createDirectories(srcDir);
+        
+        Path lombokDtoFile = srcDir.resolve("AccountDto.java");
+        Files.writeString(lombokDtoFile, createLombokAccountDto());
+        
+        // When
+        Schema<?> schema = resolver.resolveSchema("AccountDto");
+        
+        // Then
+        assertThat(schema).isNotNull();
+        assertThat(schema.getType()).isEqualTo("object");
+        assertThat(schema.getDescription()).contains("AccountDto");
+        
+        // Should have properties even without explicit getters (due to @Data)
+        Map<String, Schema> properties = schema.getProperties();
+        assertThat(properties).containsKeys("accountId", "accountNumber", "accountType", "accountStatus", "availableBalance", "userId");
+        
+        // Check field types
+        assertThat(properties.get("accountId").getType()).isEqualTo("integer");
+        assertThat(properties.get("accountNumber").getType()).isEqualTo("string");
+        assertThat(properties.get("accountType").getType()).isEqualTo("string");
+        assertThat(properties.get("accountStatus").getType()).isEqualTo("string");
+        assertThat(properties.get("availableBalance").getType()).isEqualTo("number");
+        assertThat(properties.get("userId").getType()).isEqualTo("integer");
+    }
+
+    private String createLombokAccountDto() {
+        return """
+            package com.example.dto;
+            
+            import lombok.AllArgsConstructor;
+            import lombok.Builder;
+            import lombok.Data;
+            import lombok.NoArgsConstructor;
+            import java.math.BigDecimal;
+            
+            @Data
+            @AllArgsConstructor
+            @NoArgsConstructor
+            @Builder
+            public class AccountDto {
+                
+                private Long accountId;
+                private String accountNumber;
+                private String accountType;
+                private String accountStatus;
+                private BigDecimal availableBalance;
+                private Long userId;
+            }
+            """;
+    }
 }

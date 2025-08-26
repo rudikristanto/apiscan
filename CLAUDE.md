@@ -136,12 +136,18 @@ Complete HTTP status codes: 200, 201, 304, 400, 404, 500 with appropriate schema
    - Respects `@ApiIgnore`, `@JsonIgnore`, `@Hidden`
    - Only includes public fields or fields with getters
 
-2. **Circular Reference Prevention**:
+2. **Lombok Annotation Support**:
+   - Recognizes `@Data`, `@Getter` annotations that generate getters at compile time
+   - Includes private fields in Lombok-annotated classes for schema generation
+   - Handles banking microservices DTOs using Lombok (AccountDto, etc.)
+   - **Critical Fix**: Resolves empty request body schemas for Lombok DTOs
+
+3. **Circular Reference Prevention**:
    - Uses `$ref` links instead of inline expansion
    - Depth-limited resolution (default: 7 levels for enterprise entities)
    - Tracks resolved schemas to prevent infinite loops
 
-3. **Request Body Detection**:
+4. **Request Body Detection**:
    - Prioritizes explicit `@RequestBody` annotations
    - Filters framework types (`Principal`, `HttpServletRequest`, etc.)
    - Smart DTO detection for POST/PUT/PATCH methods
@@ -190,7 +196,7 @@ Complete HTTP status codes: 200, 201, 304, 400, 404, 500 with appropriate schema
 ### Core Components
 - SpringFrameworkScanner handles multi-module discovery via `isMultiModuleProject()`, `findJavaFilesInMultiModuleProject()`
 - SpringFrameworkScanner collects constants in first pass via `collectConstants()`, resolves via `resolveAnnotationValue()`
-- DtoSchemaResolver uses `getAllResolvedSchemas()` for controlled recursive resolution
+- DtoSchemaResolver uses `getAllResolvedSchemas()` for controlled recursive resolution; `hasLombokGeneratedGetters()` detects Lombok annotations for field inclusion
 - SwaggerCoreOpenApiGenerator ensures compliance with `sanitizeSchemaName()`, `ensureUniqueOperationId()`, `buildMultipartRequestBody()`
 - **SwaggerCoreOpenApiGenerator.normalizeTagName()** consolidates controller/service tags to prevent empty OpenAPI sections
 - Multi-module prioritization messages use `logger.error()` for visibility

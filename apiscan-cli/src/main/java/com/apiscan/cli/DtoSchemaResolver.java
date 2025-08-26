@@ -787,8 +787,8 @@ public class DtoSchemaResolver {
             return false;
         }
         
-        // Only include fields that are public or have getters
-        return field.isPublic() || hasGetter(classDecl, field);
+        // Only include fields that are public, have getters, or are in a Lombok-annotated class
+        return field.isPublic() || hasGetter(classDecl, field) || hasLombokGeneratedGetters(classDecl);
     }
     
     /**
@@ -805,6 +805,22 @@ public class DtoSchemaResolver {
                 String methodName = method.getNameAsString();
                 return methodName.equals(getterName) || methodName.equals(booleanGetterName);
             });
+    }
+    
+    /**
+     * Check if class has Lombok annotations that generate getters.
+     * These annotations generate getters at compile time, not in source code.
+     */
+    private boolean hasLombokGeneratedGetters(ClassOrInterfaceDeclaration classDecl) {
+        return classDecl.getAnnotations().stream()
+                .anyMatch(annotation -> {
+                    String annotationName = annotation.getNameAsString();
+                    // Common Lombok annotations that generate getters
+                    return annotationName.equals("Data") ||
+                           annotationName.equals("Getter") ||
+                           annotationName.equals("lombok.Data") ||
+                           annotationName.equals("lombok.Getter");
+                });
     }
     
     private String capitalize(String str) {

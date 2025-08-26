@@ -33,16 +33,38 @@ Three approaches for comprehensive API discovery:
 
 **Results**: spring-petclinic-rest: 1→35 endpoints (35x improvement)
 
-### 2. Multi-Module Project Support
+### 2. Multi-Module & Microservices Project Support
 
-#### Automatic Parent Directory Scanning
-- Detects multi-module Maven projects automatically
+#### Multi-Module Maven Projects
+- Detects multi-module Maven projects automatically via parent pom.xml
 - Scans all modules when parent directory provided
 - Cross-module API discovery in single operation
 - Usage: `java -jar apiscan-cli.jar "C:\path\to\project"` (no need to specify module)
 
+#### Independent Microservices Architecture
+- **NEW**: Supports independent microservices without parent build files
+- Automatically detects multiple Spring Boot services in subdirectories
+- Each microservice has its own pom.xml/build.gradle
+- Examples: Banking microservices, distributed systems
+
+#### Microservices Output Options
+- **Combined Mode (Default)**: Single OpenAPI file with all microservices
+- **Separate Mode**: Individual OpenAPI file per microservice
+- Usage: `--microservices-output combined|separate`
+
+```bash
+# Combined output (default)
+java -jar apiscan-cli.jar "C:\path\to\microservices"
+
+# Separate files per microservice
+java -jar apiscan-cli.jar "C:\path\to\microservices" --microservices-output separate
+
+# Custom output directory for separate files
+java -jar apiscan-cli.jar "C:\path\to\microservices" --microservices-output separate -o "./openapi-specs/"
+```
+
 #### DTO Schema Resolution Strategy
-Enhanced search supporting both scenarios:
+Enhanced search supporting all scenarios:
 ```java
 // 1. Search current directory for sub-modules (parent directory with modules)
 Path currentDir = Paths.get(projectPath);
@@ -51,6 +73,9 @@ List<Path> subModuleMatches = findAllMatchesInMultiModuleProject(currentDir, cla
 // 2. Search parent directory for sibling modules (single module with siblings)
 Path parentDir = currentDir.getParent();
 List<Path> siblingModuleMatches = findAllMatchesInMultiModuleProject(parentDir, className);
+
+// 3. Independent microservices - search across all services
+List<Path> microserviceMatches = findAllMatchesInIndependentMicroservices(projectPath, className);
 ```
 
 #### Package Prioritization
@@ -67,6 +92,23 @@ Intelligent DTO vs Entity selection:
 - **Automatic Generation**: Always creates `{project-name}-openapi.{format}` file
 - **Formats**: YAML (default), JSON (`-f json`)
 - **Custom Output**: `-o custom-name.yaml`
+
+#### Microservices Tag Normalization
+- **Smart Controller Grouping**: Groups related controllers/services under unified tags
+- **Tag Consolidation**: `TransactionController` + `TransactionService` → "Transaction" tag
+- **Prevents Empty Sections**: Eliminates empty collapsible sections in OpenAPI viewers
+- **Pattern Recognition**: Strips `Controller`, `Service`, `RestController`, `Impl`, `API` suffixes
+
+Examples:
+```java
+// Before (creates empty sections):
+- TransactionController → "Transaction" tag
+- TransactionService   → "TransactionService" tag (empty if no endpoints)
+
+// After (consolidated):  
+- TransactionController → "Transaction" tag
+- TransactionService   → "Transaction" tag (merged under same section)
+```
 
 #### Critical Fixes for Validation
 1. **Path Parameter Matching**: Exact name matching between `{param}` and definitions
@@ -126,15 +168,36 @@ Complete HTTP status codes: 200, 201, 304, 400, 404, 500 with appropriate schema
 1. **Never compile/build** analyzed projects - read source directly
 2. **Use AST parsing** for accurate extraction
 3. **Maintain extensibility** for future frameworks
-4. **Test with real projects**: spring-petclinic-rest, shopizer
+4. **Test with real projects**: spring-petclinic-rest, shopizer, banking microservices
 5. **Prioritize DTOs over entities** in multi-module projects
 6. **Handle missing dependencies gracefully**
 7. **Generate valid OpenAPI 3.0.3** specifications
+8. **Support both single/multi-module and microservices architectures**
 
 ## Critical Implementation Notes
+
+### Framework Detection & Scanning
+- `SpringFrameworkDetector.isMultipleMicroservices()` detects independent microservices (≥2 services without parent build file)
+- `SpringFrameworkScanner.isIndependentMicroservices()` determines scanning strategy
+- `SpringFrameworkScanner.findJavaFilesInIndependentMicroservices()` scans all microservices
+- Multi-module vs microservices: parent build file presence is the key differentiator
+
+### Multi-Architecture Support
+- **Single Project**: Direct src/main/java scanning
+- **Multi-Module**: Parent pom.xml + child modules with their own pom.xml files
+- **Independent Microservices**: Multiple service directories with build files, no parent build file
+
+### Core Components
 - SpringFrameworkScanner handles multi-module discovery via `isMultiModuleProject()`, `findJavaFilesInMultiModuleProject()`
 - SpringFrameworkScanner collects constants in first pass via `collectConstants()`, resolves via `resolveAnnotationValue()`
 - DtoSchemaResolver uses `getAllResolvedSchemas()` for controlled recursive resolution
 - SwaggerCoreOpenApiGenerator ensures compliance with `sanitizeSchemaName()`, `ensureUniqueOperationId()`, `buildMultipartRequestBody()`
+- **SwaggerCoreOpenApiGenerator.normalizeTagName()** consolidates controller/service tags to prevent empty OpenAPI sections
 - Multi-module prioritization messages use `logger.error()` for visibility
 - File upload parameters need `in="formData"` classification and encoding info for proper UI rendering
+
+### CLI Microservices Support
+- `ApiScanCLI.handleMicroservices()` orchestrates individual service scanning
+- `MicroservicesOutputMode.combined` merges all service results into single OpenAPI file
+- `MicroservicesOutputMode.separate` generates individual OpenAPI files per microservice
+- Microservices excluded from scanning: `.git`, `docs`, `target`, `build`, `postman_collection`

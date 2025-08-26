@@ -272,9 +272,8 @@ public class SwaggerCoreOpenApiGenerator {
             // Use controller class name as default tag
             String tag = endpoint.getControllerClass();
             if (tag != null) {
-                tag = tag.replace("Controller", "")
-                         .replace("RestController", "")
-                         .replace("Rest", "");
+                // Normalize tag names to group related controllers/services under same tag
+                tag = normalizeTagName(tag);
                 tags = Collections.singletonList(tag);
             }
         }
@@ -354,6 +353,31 @@ public class SwaggerCoreOpenApiGenerator {
         }
         
         return operation;
+    }
+    
+    /**
+     * Normalize tag names to group related controllers and services under the same tag.
+     * This prevents empty sections in OpenAPI viewers when combining microservices.
+     * 
+     * Examples:
+     * - TransactionController -> Transaction
+     * - TransactionService -> Transaction
+     * - AccountController -> Account
+     * - AccountService -> Account
+     */
+    private String normalizeTagName(String controllerClass) {
+        if (controllerClass == null) {
+            return null;
+        }
+        
+        return controllerClass
+            .replace("Controller", "")
+            .replace("RestController", "")
+            .replace("Service", "")
+            .replace("Rest", "")
+            .replace("Impl", "")  // Handle ServiceImpl classes
+            .replace("API", "")   // Handle APIController classes
+            .replace("Api", "");  // Handle ApiController classes
     }
     
     private Parameter buildParameter(ApiEndpoint.Parameter param, String path) {

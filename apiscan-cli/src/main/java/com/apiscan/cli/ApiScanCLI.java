@@ -244,6 +244,12 @@ public class ApiScanCLI implements Callable<Integer> {
                 openApiGenerator.saveToFile(openApiSpec, outputFile);
                 System.out.println("  * " + serviceName + " OpenAPI saved: " + outputFile.toAbsolutePath());
             }
+            
+            // Show detailed endpoint breakdown and summary for separate mode
+            if (showSummary) {
+                System.out.println();
+                printMicroservicesDetailedSummary(serviceResults, totalScanTime);
+            }
         } else {
             // Generate combined OpenAPI file (default)
             System.out.println();
@@ -377,6 +383,148 @@ public class ApiScanCLI implements Callable<Integer> {
         return Files.exists(directory.resolve("pom.xml")) ||
                Files.exists(directory.resolve("build.gradle")) ||
                Files.exists(directory.resolve("build.gradle.kts"));
+    }
+    
+    private void printMicroservicesDetailedSummary(Map<String, ScanResult> serviceResults, long totalScanTime) {
+        // Calculate totals for overall summary
+        int totalEndpoints = 0;
+        int totalFiles = 0;
+        
+        for (ScanResult result : serviceResults.values()) {
+            totalEndpoints += result.getEndpoints().size();
+            totalFiles += result.getFilesScanned();
+        }
+        
+        // Create a combined result for the overall summary
+        ScanResult combinedResult = new ScanResult();
+        combinedResult.setProjectPath("Independent Microservices");
+        combinedResult.setFramework("Spring Microservices");
+        combinedResult.setFilesScanned(totalFiles);
+        combinedResult.setScanDurationMs(totalScanTime);
+        
+        // Add all endpoints from all services
+        for (ScanResult result : serviceResults.values()) {
+            combinedResult.getEndpoints().addAll(result.getEndpoints());
+        }
+        
+        // Print the overall summary using ReportGenerator
+        reportGenerator.printSummary(combinedResult, totalScanTime);
+        
+        // Print detailed breakdown for each service
+        System.out.println();
+        System.out.println("=========================================================");
+        System.out.println("|            MICROSERVICES BREAKDOWN                   |");
+        System.out.println("=========================================================");
+        
+        // Sort services by endpoint count for better organization
+        serviceResults.entrySet().stream()
+            .filter(entry -> !entry.getValue().getEndpoints().isEmpty())
+            .sorted((e1, e2) -> Integer.compare(e2.getValue().getEndpoints().size(), e1.getValue().getEndpoints().size()))
+            .forEach(entry -> {
+                String serviceName = entry.getKey();
+                ScanResult result = entry.getValue();
+                
+                System.out.println();
+                System.out.println("Service: " + serviceName + " (" + result.getEndpoints().size() + " endpoints)");
+                System.out.println("-".repeat(70));
+                
+                // Print endpoints using the same logic as ReportGenerator
+                printServiceEndpoints(result);
+            });
+        
+        System.out.println();
+        System.out.println("=========================================================");
+        System.out.println("|             SCAN COMPLETED SUCCESSFULLY!             |");
+        System.out.println("=========================================================");
+    }
+    
+    /**
+     * Print endpoints for a single service using the same formatting as ReportGenerator
+     */
+    private void printServiceEndpoints(ScanResult result) {
+        if (result.getEndpoints().isEmpty()) {
+            return;
+        }
+        
+        // Group endpoints by controller (same logic as ReportGenerator)
+        Map<String, List<com.apiscan.core.model.ApiEndpoint>> byController = result.getEndpoints().stream()
+            .collect(java.util.stream.Collectors.groupingBy(com.apiscan.core.model.ApiEndpoint::getControllerClass));
+        
+        // Print each controller's endpoints with consistent formatting
+        byController.entrySet().stream()
+            .sorted((a, b) -> Integer.compare(b.getValue().size(), a.getValue().size()))
+            .forEach(controllerEntry -> {
+                if (byController.size() > 1) {
+                    System.out.println("Controller: " + controllerEntry.getKey());
+                    System.out.println("-".repeat(70));
+                }
+                
+                controllerEntry.getValue().stream()
+                    .sorted(java.util.Comparator.comparing(com.apiscan.core.model.ApiEndpoint::getPath)
+                        .thenComparing(com.apiscan.core.model.ApiEndpoint::getHttpMethod))
+                    .forEach(endpoint -> {
+                        // Use ReportGenerator's method icon logic
+                        String methodIcon = getMethodIcon(endpoint.getHttpMethod());
+                        String deprecatedFlag = endpoint.isDeprecated() ? " [DEPRECATED]" : "";
+                        
+                        // Format with proper alignment (same as ReportGenerator)
+                        String methodDisplay = String.format("%-8s", methodIcon);
+                        String path = String.format("%-40s", truncate(endpoint.getPath(), 40));
+                        String methodName = endpoint.getMethodName();
+                        
+                        System.out.printf("  %s %s %s%s%n",
+                            methodDisplay,
+                            path,
+                            methodName,
+                            deprecatedFlag
+                        );
+                        
+                        // Show parameters with proper indentation (same as ReportGenerator)
+                        if (!endpoint.getParameters().isEmpty()) {
+                            String params = endpoint.getParameters().stream()
+                                .map(p -> p.getName())
+                                .collect(java.util.stream.Collectors.joining(", "));
+                            if (params.length() > 45) {
+                                params = params.substring(0, 42) + "...";
+                            }
+                            // Use 11-space indentation to align under the URL
+                            System.out.printf("           Parameters: %s%n", params);
+                        }
+                        
+                        // Show request body if present (same as ReportGenerator)
+                        if (endpoint.getRequestBody() != null && !endpoint.getRequestBody().getContent().isEmpty()) {
+                            String bodyType = endpoint.getRequestBody().getContent().values().stream()
+                                .findFirst()
+                                .map(media -> media.getSchema())
+                                .orElse("Unknown");
+                            // Use 11-space indentation to align under the URL
+                            System.out.printf("           Request Body: %s%n", bodyType);
+                        }
+                    });
+            });
+    }
+    
+    /**
+     * Get method icon (same logic as ReportGenerator)
+     */
+    private String getMethodIcon(String method) {
+        switch (method.toUpperCase()) {
+            case "GET": return "[GET]";
+            case "POST": return "[POST]";
+            case "PUT": return "[PUT]";
+            case "DELETE": return "[DEL]";
+            case "PATCH": return "[PATCH]";
+            default: return "[" + method + "]";
+        }
+    }
+    
+    /**
+     * Truncate string to specified length with ellipsis (same as ReportGenerator)
+     */
+    private String truncate(String str, int maxLength) {
+        if (str == null) return "";
+        if (str.length() <= maxLength) return str;
+        return str.substring(0, maxLength - 3) + "...";
     }
     
     public static void main(String[] args) {

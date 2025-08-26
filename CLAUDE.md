@@ -208,3 +208,5 @@ Complete HTTP status codes: 200, 201, 304, 400, 404, 500 with appropriate schema
 - **Windows Compatibility**: ASCII-safe output (no Unicode symbols) for proper display in CMD/PowerShell
 - **Logging Separation**: Debug info (MULTI-MATCH, PRIORITIZATION) goes to `apiscan-debug.log`, clean output to console
 - **Test Noise Suppression**: `logback-test.xml` silences expected JavaParser errors in negative test cases
+- **Enhanced Separate Mode**: Microservices separate output mode now includes detailed endpoint breakdown for each service, HTTP method counts, service rankings, and comprehensive architecture overview - matching the informational depth of single/multi-module projects
+- **Consistent Formatting**: All output modes now use unified display formatting with proper indentation, alignment, and structure - eliminating formatting inconsistencies between different project types

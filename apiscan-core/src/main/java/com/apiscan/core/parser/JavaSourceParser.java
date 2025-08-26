@@ -1,6 +1,7 @@
 package com.apiscan.core.parser;
 
 import com.github.javaparser.JavaParser;
+import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.ParseResult;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -40,8 +41,12 @@ public class JavaSourceParser {
         });
         
         JavaSymbolSolver symbolSolver = new JavaSymbolSolver(typeSolver);
-        this.javaParser = new JavaParser();
-        this.javaParser.getParserConfiguration().setSymbolResolver(symbolSolver);
+        
+        ParserConfiguration config = new ParserConfiguration();
+        config.setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_17);
+        config.setSymbolResolver(symbolSolver);
+        
+        this.javaParser = new JavaParser(config);
     }
     
     public Optional<CompilationUnit> parseFile(Path filePath) {

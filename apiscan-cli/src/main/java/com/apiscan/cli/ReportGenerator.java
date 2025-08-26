@@ -13,6 +13,10 @@ public class ReportGenerator {
     }
     
     public void printSummary(ScanResult result, long scanTimeMs) {
+        printSummary(result, scanTimeMs, null);
+    }
+    
+    public void printSummary(ScanResult result, long scanTimeMs, Map<String, ScanResult> microservicesContext) {
         System.out.println();
         System.out.println("=========================================================");
         System.out.println("|                    SCAN SUMMARY                      |");
@@ -112,63 +116,108 @@ public class ReportGenerator {
             System.out.println("|                    API ENDPOINTS                     |");
             System.out.println("=========================================================");
             
-            // Group and display by controller
-            byController.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .forEach(controllerEntry -> {
-                    System.out.println();
-                    System.out.println("Controller: " + controllerEntry.getKey());
-                    System.out.println("-".repeat(70));
-                    
-                    controllerEntry.getValue().stream()
-                        .sorted(Comparator.comparing(ApiEndpoint::getPath)
-                            .thenComparing(ApiEndpoint::getHttpMethod))
-                        .forEach(endpoint -> {
-                            String methodIcon = getMethodIcon(endpoint.getHttpMethod());
-                            String deprecatedFlag = endpoint.isDeprecated() ? " [DEPRECATED]" : "";
-                            
-                            // Format the main endpoint line with proper alignment
-                            // Use fixed 8-char width for method icon to ensure URL alignment
-                            String methodDisplay = String.format("%-8s", methodIcon);
-                            String path = String.format("%-40s", truncate(endpoint.getPath(), 40));
-                            String methodName = endpoint.getMethodName();
-                            
-                            System.out.printf("  %s %s %s%s%n",
-                                methodDisplay,
-                                path,
-                                methodName,
-                                deprecatedFlag
-                            );
-                            
-                            // Show parameters with proper indentation
-                            if (!endpoint.getParameters().isEmpty()) {
-                                String params = endpoint.getParameters().stream()
-                                    .map(p -> p.getName())
-                                    .collect(Collectors.joining(", "));
-                                if (params.length() > 45) {
-                                    params = params.substring(0, 42) + "...";
-                                }
-                                // Use 11-space indentation to align under the URL
-                                System.out.printf("           Parameters: %s%n", params);
-                            }
-                            
-                            // Show request body if present
-                            if (endpoint.getRequestBody() != null && !endpoint.getRequestBody().getContent().isEmpty()) {
-                                String bodyType = endpoint.getRequestBody().getContent().values().stream()
-                                    .findFirst()
-                                    .map(media -> media.getSchema())
-                                    .orElse("Unknown");
-                                // Use 11-space indentation to align under the URL
-                                System.out.printf("           Request Body: %s%n", bodyType);
-                            }
-                        });
-                });
+            if (microservicesContext != null && !microservicesContext.isEmpty()) {
+                // Microservices mode: group by service, then by controller
+                printMicroservicesEndpoints(microservicesContext);
+            } else {
+                // Single project or multi-module mode: group by controller only
+                printEndpointsByController(byController);
+            }
         }
         
         System.out.println();
         System.out.println("=========================================================");
         System.out.println("|             SCAN COMPLETED SUCCESSFULLY!             |");
         System.out.println("=========================================================");
+    }
+    
+    private void printEndpointsByController(Map<String, List<ApiEndpoint>> byController) {
+        byController.entrySet().stream()
+            .sorted(Map.Entry.comparingByKey())
+            .forEach(controllerEntry -> {
+                System.out.println();
+                System.out.println("Controller: " + controllerEntry.getKey());
+                System.out.println("-".repeat(70));
+                
+                printEndpointsForController(controllerEntry.getValue());
+            });
+    }
+    
+    private void printMicroservicesEndpoints(Map<String, ScanResult> microservicesContext) {
+        // Sort services by endpoint count (most endpoints first)
+        microservicesContext.entrySet().stream()
+            .filter(entry -> !entry.getValue().getEndpoints().isEmpty())
+            .sorted((e1, e2) -> Integer.compare(e2.getValue().getEndpoints().size(), e1.getValue().getEndpoints().size()))
+            .forEach(serviceEntry -> {
+                String serviceName = serviceEntry.getKey();
+                ScanResult serviceResult = serviceEntry.getValue();
+                
+                System.out.println();
+                System.out.println("Service: " + serviceName + " (" + serviceResult.getEndpoints().size() + " endpoints)");
+                System.out.println("=".repeat(70));
+                
+                // Group endpoints by controller within this service
+                Map<String, List<ApiEndpoint>> byController = serviceResult.getEndpoints().stream()
+                    .collect(Collectors.groupingBy(ApiEndpoint::getControllerClass));
+                
+                byController.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .forEach(controllerEntry -> {
+                        // Only show controller header if there are multiple controllers in this service
+                        if (byController.size() > 1) {
+                            System.out.println();
+                            System.out.println("Controller: " + controllerEntry.getKey());
+                            System.out.println("-".repeat(70));
+                        }
+                        
+                        printEndpointsForController(controllerEntry.getValue());
+                    });
+            });
+    }
+    
+    private void printEndpointsForController(List<ApiEndpoint> endpoints) {
+        endpoints.stream()
+            .sorted(Comparator.comparing(ApiEndpoint::getPath)
+                .thenComparing(ApiEndpoint::getHttpMethod))
+            .forEach(endpoint -> {
+                String methodIcon = getMethodIcon(endpoint.getHttpMethod());
+                String deprecatedFlag = endpoint.isDeprecated() ? " [DEPRECATED]" : "";
+                
+                // Format the main endpoint line with proper alignment
+                // Use fixed 8-char width for method icon to ensure URL alignment
+                String methodDisplay = String.format("%-8s", methodIcon);
+                String path = String.format("%-40s", truncate(endpoint.getPath(), 40));
+                String methodName = endpoint.getMethodName();
+                
+                System.out.printf("  %s %s %s%s%n",
+                    methodDisplay,
+                    path,
+                    methodName,
+                    deprecatedFlag
+                );
+                
+                // Show parameters with proper indentation
+                if (!endpoint.getParameters().isEmpty()) {
+                    String params = endpoint.getParameters().stream()
+                        .map(p -> p.getName())
+                        .collect(Collectors.joining(", "));
+                    if (params.length() > 45) {
+                        params = params.substring(0, 42) + "...";
+                    }
+                    // Use 11-space indentation to align under the URL
+                    System.out.printf("           Parameters: %s%n", params);
+                }
+                
+                // Show request body if present
+                if (endpoint.getRequestBody() != null && !endpoint.getRequestBody().getContent().isEmpty()) {
+                    String bodyType = endpoint.getRequestBody().getContent().values().stream()
+                        .findFirst()
+                        .map(media -> media.getSchema())
+                        .orElse("Unknown");
+                    // Use 11-space indentation to align under the URL
+                    System.out.printf("           Request Body: %s%n", bodyType);
+                }
+            });
     }
     
     private String getMethodIcon(String method) {

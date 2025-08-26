@@ -26,6 +26,8 @@ import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.responses.ApiResponses;
 import io.swagger.v3.oas.models.servers.Server;
 import io.swagger.v3.oas.models.tags.Tag;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -38,6 +40,7 @@ import java.util.stream.Collectors;
  * This replaces the custom implementation to ensure full OpenAPI 3.0.3 compliance.
  */
 public class SwaggerCoreOpenApiGenerator {
+    private static final Logger logger = LoggerFactory.getLogger(SwaggerCoreOpenApiGenerator.class);
     
     private final DtoSchemaResolver dtoSchemaResolver;
     private final Set<String> usedOperationIds = new HashSet<>();
@@ -68,7 +71,7 @@ public class SwaggerCoreOpenApiGenerator {
     }
     
     private OpenAPI buildOpenApiSpec(ScanResult scanResult) {
-        System.out.println("[DEBUG] Starting OpenAPI specification generation...");
+        logger.debug("Starting OpenAPI specification generation...");
         long startTime = System.currentTimeMillis();
         
         OpenAPI openApi = new OpenAPI();
@@ -81,11 +84,11 @@ public class SwaggerCoreOpenApiGenerator {
         openApi.servers(buildServers());
         
         // Initialize DTO schema resolver with project path
-        System.out.println("[DEBUG] Initializing DTO schema resolver...");
+        logger.debug("Initializing DTO schema resolver...");
         DtoSchemaResolver schemaResolver = new DtoSchemaResolver(scanResult.getProjectPath());
         
         // Build paths and collect DTO schemas
-        System.out.println("[DEBUG] Building paths for " + scanResult.getEndpoints().size() + " endpoints...");
+        logger.debug("Building paths for {} endpoints...", scanResult.getEndpoints().size());
         Paths paths = new Paths();
         Set<String> usedTags = new HashSet<>();
         Map<String, Schema> dtoSchemas = new HashMap<>();
@@ -98,25 +101,25 @@ public class SwaggerCoreOpenApiGenerator {
             
             processedEndpoints++;
             if (processedEndpoints % 50 == 0) {
-                System.out.println("[DEBUG] Processed " + processedEndpoints + " endpoints, latest took " + endpointTime + "ms");
+                logger.debug("Processed {} endpoints, latest took {}ms", processedEndpoints, endpointTime);
             }
             
             // Add timeout check - prevent hanging after 2 minutes
             if (System.currentTimeMillis() - startTime > 120000) {
-                System.out.println("[WARNING] OpenAPI generation taking too long, stopping after " + processedEndpoints + " endpoints");
+                logger.warn("OpenAPI generation taking too long, stopping after {} endpoints", processedEndpoints);
                 break;
             }
         }
         
-        System.out.println("[DEBUG] Finished processing endpoints. Found " + dtoSchemas.size() + " DTO schemas");
+        logger.debug("Finished processing endpoints. Found {} DTO schemas", dtoSchemas.size());
         
         // Debug: List all DTO schemas that will be added to components
         if (!dtoSchemas.isEmpty()) {
-            System.out.println("[DEBUG] DTO schemas to be included in components:");
+            logger.debug("DTO schemas to be included in components:");
             dtoSchemas.keySet().forEach(key -> {
                 Schema schema = dtoSchemas.get(key);
                 String props = schema.getProperties() != null ? String.valueOf(schema.getProperties().size()) : "0";
-                System.out.println("  - " + key + " (" + props + " properties)");
+                logger.debug("  - {} ({} properties)", key, props);
             });
         }
         
@@ -138,12 +141,12 @@ public class SwaggerCoreOpenApiGenerator {
             
             // Debug logging for problematic schema names
             if (!schemaName.equals(sanitizedName)) {
-                System.out.println("[DEBUG] Schema name sanitized: '" + schemaName + "' -> '" + sanitizedName + "'");
+                logger.debug("Schema name sanitized: '{}' -> '{}'", schemaName, sanitizedName);
             }
         });
         
         if (!allSchemas.isEmpty()) {
-            System.out.println("[DEBUG] Adding " + allSchemas.size() + " total schemas to components...");
+            logger.debug("Adding {} total schemas to components...", allSchemas.size());
             Components components = new Components();
             components.schemas(allSchemas);
             openApi.components(components);
@@ -165,7 +168,7 @@ public class SwaggerCoreOpenApiGenerator {
         }
         
         long totalTime = System.currentTimeMillis() - startTime;
-        System.out.println("[DEBUG] OpenAPI generation completed in " + totalTime + "ms");
+        logger.debug("OpenAPI generation completed in {}ms", totalTime);
         
         return openApi;
     }
@@ -640,7 +643,7 @@ public class SwaggerCoreOpenApiGenerator {
         long resolveTime = System.currentTimeMillis() - resolveStart;
         
         if (resolveTime > 1000) {
-            System.out.println("[WARNING] DTO resolution for '" + className + "' took " + resolveTime + "ms");
+            logger.warn("DTO resolution for '{}' took {}ms", className, resolveTime);
         }
         
         if (resolvedSchema != null) {

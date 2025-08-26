@@ -91,7 +91,7 @@ public class ReportGenerator {
             System.out.println("Errors encountered:");
             System.out.println("-----------------------------------------");
             result.getErrors().forEach(error -> {
-                System.out.println("  [ERROR] " + error);
+                System.out.println("  - " + error);
             });
         }
         

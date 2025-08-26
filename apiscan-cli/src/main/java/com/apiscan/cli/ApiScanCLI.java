@@ -87,12 +87,12 @@ public class ApiScanCLI implements Callable<Integer> {
         System.out.println("|            Enterprise API Endpoint Scanner           |");
         System.out.println("=========================================================");
         System.out.println();
-        System.out.println("[INFO] Analyzing project: " + path.getFileName());
-        System.out.println("[INFO] Location: " + path);
+        System.out.println("Analyzing project: " + path.getFileName());
+        System.out.println("Location: " + path);
         
         // Check if this is a microservices architecture
         if (isIndependentMicroservices(path)) {
-            System.out.println("[INFO] Detected microservices architecture");
+            System.out.println("Detected microservices architecture");
             return handleMicroservices(path);
         }
         
@@ -105,34 +105,42 @@ public class ApiScanCLI implements Callable<Integer> {
         String detectedFramework = detectFramework(path);
         if (detectedFramework == null) {
             System.out.println();
-            System.out.println("[ERROR] No supported framework detected");
+            System.out.println("ERROR: No supported framework detected");
             System.out.println("        Supported frameworks: Spring MVC, Spring Boot");
             System.out.println("        Please ensure your project contains a valid pom.xml or build.gradle");
             return 1;
         }
         
-        System.out.println("[INFO] Framework detected: " + detectedFramework);
+        System.out.println("Framework detected: " + detectedFramework);
         
         // Find appropriate scanner
         FrameworkScanner scanner = findScanner(detectedFramework);
         if (scanner == null) {
-            System.out.println("[ERROR] No scanner available for framework: " + detectedFramework);
+            System.out.println("ERROR: No scanner available for framework: " + detectedFramework);
             return 1;
         }
         
-        // Perform scan
-        System.out.println("[INFO] Scanning for API endpoints...");
+        // Perform scan with progress indicator
+        ProgressIndicator scanProgress = new ProgressIndicator("Scanning for API endpoints...");
+        scanProgress.start();
+        
         long startTime = System.currentTimeMillis();
         ScanResult result = scanner.scan(path);
         long scanTime = System.currentTimeMillis() - startTime;
         
+        scanProgress.stop();
+        
         // Print scan completion
-        System.out.println("[SUCCESS] Scan completed in " + scanTime + "ms");
-        System.out.println("[RESULT] Found " + result.getEndpoints().size() + " API endpoints");
+        System.out.println("Scan completed successfully in " + scanTime + "ms");
+        System.out.println("Found " + result.getEndpoints().size() + " API endpoints");
         
         // Generate OpenAPI specification (core requirement from CLAUDE.md)
-        System.out.println("[INFO] Generating OpenAPI specification...");
+        ProgressIndicator openApiProgress = new ProgressIndicator("Generating OpenAPI specification...");
+        openApiProgress.start();
+        
         String openApiSpec = openApiGenerator.generate(result, format);
+        
+        openApiProgress.stop();
         
         // Determine output file path
         Path outputFile;
@@ -147,7 +155,7 @@ public class ApiScanCLI implements Callable<Integer> {
         
         // Save OpenAPI specification to file
         openApiGenerator.saveToFile(openApiSpec, outputFile);
-        System.out.println("[SUCCESS] OpenAPI specification saved: " + outputFile.toAbsolutePath());
+        System.out.println("OpenAPI specification saved: " + outputFile.toAbsolutePath());
         
         // Print spec to console if verbose mode is enabled
         if (verbose) {
@@ -167,7 +175,7 @@ public class ApiScanCLI implements Callable<Integer> {
     
     private Integer handleMicroservices(Path path) throws Exception {
         List<Path> microservices = findMicroservices(path);
-        System.out.println("[INFO] Found " + microservices.size() + " microservices");
+        System.out.println("Found " + microservices.size() + " microservices");
         
         Map<String, ScanResult> serviceResults = new HashMap<>();
         long totalStartTime = System.currentTimeMillis();
@@ -176,33 +184,36 @@ public class ApiScanCLI implements Callable<Integer> {
         for (Path servicePath : microservices) {
             String serviceName = servicePath.getFileName().toString();
             System.out.println();
-            System.out.println("[INFO] Scanning microservice: " + serviceName);
+            
+            ProgressIndicator microserviceProgress = new ProgressIndicator("Scanning microservice: " + serviceName);
+            microserviceProgress.start();
             
             String detectedFramework = detectFramework(servicePath);
             if (detectedFramework == null) {
-                System.out.println("[WARN] No framework detected for " + serviceName + ", skipping");
+                microserviceProgress.complete("WARNING: No framework detected for " + serviceName + ", skipping");
                 continue;
             }
             
             FrameworkScanner scanner = findScanner(detectedFramework);
             if (scanner == null) {
-                System.out.println("[WARN] No scanner available for " + serviceName + ", skipping");
+                microserviceProgress.complete("WARNING: No scanner available for " + serviceName + ", skipping");
                 continue;
             }
             
             long startTime = System.currentTimeMillis();
             ScanResult result = scanner.scan(servicePath);
+            microserviceProgress.stop();
             long scanTime = System.currentTimeMillis() - startTime;
             
             serviceResults.put(serviceName, result);
-            System.out.println("[SUCCESS] Found " + result.getEndpoints().size() + 
+            System.out.println("Found " + result.getEndpoints().size() + 
                              " endpoints in " + serviceName + " (" + scanTime + "ms)");
         }
         
         long totalScanTime = System.currentTimeMillis() - totalStartTime;
         
         if (serviceResults.isEmpty()) {
-            System.out.println("[ERROR] No microservices could be scanned");
+            System.out.println("ERROR: No microservices could be scanned");
             return 1;
         }
         
@@ -210,7 +221,7 @@ public class ApiScanCLI implements Callable<Integer> {
         if (microservicesOutputMode == MicroservicesOutputMode.separate) {
             // Generate individual OpenAPI files for each microservice
             System.out.println();
-            System.out.println("[INFO] Generating individual OpenAPI specifications...");
+            System.out.println("Generating individual OpenAPI specifications...");
             
             for (Map.Entry<String, ScanResult> entry : serviceResults.entrySet()) {
                 String serviceName = entry.getKey();
@@ -231,12 +242,13 @@ public class ApiScanCLI implements Callable<Integer> {
                 }
                 
                 openApiGenerator.saveToFile(openApiSpec, outputFile);
-                System.out.println("[SUCCESS] " + serviceName + " OpenAPI saved: " + outputFile.toAbsolutePath());
+                System.out.println("  * " + serviceName + " OpenAPI saved: " + outputFile.toAbsolutePath());
             }
         } else {
             // Generate combined OpenAPI file (default)
             System.out.println();
-            System.out.println("[INFO] Generating combined OpenAPI specification...");
+            ProgressIndicator combineGenProgress = new ProgressIndicator("Generating combined OpenAPI specification...");
+            combineGenProgress.start();
             
             // Merge all results into one
             ScanResult combinedResult = new ScanResult();
@@ -271,6 +283,8 @@ public class ApiScanCLI implements Callable<Integer> {
             
             String openApiSpec = openApiGenerator.generate(combinedResult, format);
             
+            combineGenProgress.stop();
+            
             Path outputFile;
             if (outputPath != null) {
                 outputFile = Paths.get(outputPath);
@@ -281,8 +295,8 @@ public class ApiScanCLI implements Callable<Integer> {
             }
             
             openApiGenerator.saveToFile(openApiSpec, outputFile);
-            System.out.println("[SUCCESS] Combined OpenAPI specification saved: " + outputFile.toAbsolutePath());
-            System.out.println("[RESULT] Total endpoints across all microservices: " + totalEndpoints);
+            System.out.println("Combined OpenAPI specification saved: " + outputFile.toAbsolutePath());
+            System.out.println("Total endpoints across all microservices: " + totalEndpoints);
             
             if (showSummary) {
                 reportGenerator.printSummary(combinedResult, totalScanTime);

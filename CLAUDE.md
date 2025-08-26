@@ -201,3 +201,10 @@ Complete HTTP status codes: 200, 201, 304, 400, 404, 500 with appropriate schema
 - `MicroservicesOutputMode.combined` merges all service results into single OpenAPI file
 - `MicroservicesOutputMode.separate` generates individual OpenAPI files per microservice
 - Microservices excluded from scanning: `.git`, `docs`, `target`, `build`, `postman_collection`
+
+### User Experience Enhancements
+- **Progress Indicators**: ASCII spinner animations show during long operations (scanning, OpenAPI generation)
+- **Clean Output**: Removed prefix tags ([INFO], [SUCCESS], etc.) for more natural console output
+- **Windows Compatibility**: ASCII-safe output (no Unicode symbols) for proper display in CMD/PowerShell
+- **Logging Separation**: Debug info (MULTI-MATCH, PRIORITIZATION) goes to `apiscan-debug.log`, clean output to console
+- **Test Noise Suppression**: `logback-test.xml` silences expected JavaParser errors in negative test cases

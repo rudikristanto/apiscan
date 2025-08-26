@@ -88,12 +88,15 @@ for %%F in ("!PROJECT_PATH!") do set PROJECT_NAME=%%~nxF
 REM Build JAR unless skip-build is specified
 if "!SKIP_BUILD!"=="false" (
     echo Building APISCAN...
+    echo This may take a moment, please wait...
     call mvn clean package -DskipTests -q
     
     if !ERRORLEVEL! neq 0 (
         echo Build failed!
         pause
         exit /b 1
+    ) else (
+        echo Build completed successfully
     )
 ) else (
     echo Skipping build, using existing JAR...

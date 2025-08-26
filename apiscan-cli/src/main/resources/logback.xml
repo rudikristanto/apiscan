@@ -32,9 +32,17 @@
         <appender-ref ref="FILE" />
     </logger>
     
-    <!-- CLI loggers - clean output -->
+    <!-- CLI loggers - clean output for console, debug to file -->
     <logger name="com.apiscan.cli" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE" />
+    </logger>
+    
+    <!-- CLI debug loggers - only to file -->
+    <logger name="com.apiscan.cli.DtoSchemaResolver" level="DEBUG" additivity="false">
+        <appender-ref ref="FILE" />
+    </logger>
+    
+    <logger name="com.apiscan.cli.SwaggerCoreOpenApiGenerator" level="DEBUG" additivity="false">
         <appender-ref ref="FILE" />
     </logger>
     

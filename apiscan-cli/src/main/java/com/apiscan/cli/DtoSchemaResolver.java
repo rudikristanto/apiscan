@@ -131,7 +131,7 @@ public class DtoSchemaResolver {
             }
             
             if (allMatches.size() > 1) {
-                logger.info("MULTI-MATCH: Found {} total matches for '{}', applying prioritization", allMatches.size(), className);
+                logger.debug("MULTI-MATCH: Found {} total matches for '{}', applying prioritization", allMatches.size(), className);
                 return prioritizeDtoPackage(allMatches, className + ".java");
             }
             
@@ -345,7 +345,7 @@ public class DtoSchemaResolver {
                 .filter(path -> path.toString().contains(priorityPackage))
                 .findFirst();
             if (priorityMatch.isPresent()) {
-                logger.info("PRIORITIZATION: Selected '{}' from package '{}' over {} other matches: {}", 
+                logger.debug("PRIORITIZATION: Selected '{}' from package '{}' over {} other matches: {}", 
                     fileName, priorityPackage, matches.size() - 1,
                     matches.stream().filter(p -> !p.equals(priorityMatch.get())).map(Path::toString).collect(Collectors.toList()));
                 return priorityMatch;
